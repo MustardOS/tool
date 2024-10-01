@@ -1,5 +1,12 @@
 #!/bin/sh
 
+for CMD in zstdmt sha256sum; do
+	if ! command -v "$CMD" >/dev/null 2>&1; then
+		printf "Missing '%s' command\n" "$CMD"
+		exit 1
+	fi
+done
+
 if [ "$#" -ne 1 ]; then
 	printf "Usage: %s <image_dir>\n" "$0"
 	exit 1

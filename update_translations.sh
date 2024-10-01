@@ -1,5 +1,17 @@
 #!/bin/sh
 
+for CMD in curl unzip; do
+	if ! command -v "$CMD" >/dev/null 2>&1; then
+		printf "Missing '%s' command\n" "$CMD"
+		exit 1
+	fi
+done
+
+if [ ! -f "$HOME/.weblate" ]; then
+	printf "No Weblate token found\n"
+	exit 1
+fi
+
 REPO_LANG_DIR="Repo/MustardOS/internal/init/MUOS/language"
 WEBLATE_URL="https://hosted.weblate.org/api/projects/muos/file/"
 TOKEN="$(cat "$HOME/.weblate")"
