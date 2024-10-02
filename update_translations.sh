@@ -36,6 +36,7 @@ fi
 printf "\033[1mDecompressing translations\033[0m\n"
 unzip -j translations.zip
 
+tr_rename "ca.json" "Catalan.json"
 tr_rename "ca@valencia.json" "Valencian.json"
 tr_rename "cs.json" "Czech.json"
 tr_rename "de.json" "German.json"
