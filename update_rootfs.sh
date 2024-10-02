@@ -125,7 +125,7 @@ for IMG in "$DIR"/*.img; do
 		sudo -v
 
 		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
-		dd if="$ROOTFS" of="$IMG" bs=4M seek=319488 conv=notrunc,noerror status=progress
+		dd if="$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
 
 		printf "\n"
 
