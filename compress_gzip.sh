@@ -43,7 +43,14 @@ find "$DIR" -maxdepth 1 -name '*.img' -type f | while IFS= read -r IMG; do
 	rm -f "$COMPRESS_DIR/$IMAGE_FILE"
 
 	printf "\033[1mGenerating Torrent:\033[0m "
-	transmission-create --anonymize -o "$COMPRESS_DIR/Torrent/$(basename -s ".img" "$IMAGE_FILE").torrent" "$COMPRESSED_FILE"
+	transmission-create --anonymize \
+		-t "udp://tracker.opentrackr.org:1337/announce" \
+		-t "udp://tracker.torrent.eu.org:451/announce" \
+		-t "udp://tracker-udp.gbitt.info:80/announce" \
+		-t "udp://tracker.0x7c0.com:6969/announce" \
+		-t "udp://open.tracker.cl:1337/announce" \
+		-t "udp://opentracker.io:6969/announce" \
+		-o "$COMPRESS_DIR/Torrent/$(basename -s ".img" "$IMAGE_FILE").torrent" "$COMPRESSED_FILE"
 
 	printf "\033[1mCalculating Hash:\033[0m "
 	C_HASH=$(sha256sum "$COMPRESSED_FILE" | awk -v name="$IMAGE_FILE.gz" '{print $1, name}')
