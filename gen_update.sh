@@ -22,7 +22,7 @@ UPDATE_DIR="$REL_DIR/.UPDATE.$$"
 MU_UDIR="$REL_DIR/UPDATE"
 
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
-trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" update.sh' EXIT INT TERM
+trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh"' EXIT INT TERM
 
 # Check for at least two arguments - commits and then mount points
 if [ "$#" -lt 2 ]; then
