@@ -22,7 +22,7 @@ SEARCH_TRANSLATIONS_IN_DIRECTORY() {
 	DIRECTORY="$1"
 	SECTION="$2"
 
-	find "$DIRECTORY" -type f -name "main*.c" -o -name "ui_scr*.c" | while read -r FILE; do
+	find "$DIRECTORY" -type f -name "*.c" | while read -r FILE; do
 		printf "Processing: %s\n" "$FILE"
 		CONTENT=$(sed ':a;N;$!ba;s/\" *\n *\"//g' "$FILE")
 
@@ -74,6 +74,10 @@ UPDATE_JSON_FILE() {
 	jq -S '.' "$MERGED_JSON" >"$JSON_PATH"
 	rm "$TEMP_JSON" "$MERGED_JSON"
 }
+
+FOLDER_PATH="$HOME/$REPO_ROOT/$REPO_FRONTEND"/common
+FOLDER=$(basename "$FOLDER_PATH")
+SEARCH_TRANSLATIONS_IN_DIRECTORY "$FOLDER_PATH" "$FOLDER"
 
 for FOLDER_PATH in "$HOME/$REPO_ROOT/$REPO_FRONTEND"/mux*; do
 	if [ -d "$FOLDER_PATH" ]; then
