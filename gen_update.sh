@@ -54,7 +54,7 @@ rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 
 # Grab the file diff of all changes based on commit to commit
-git diff --name-status "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.txt"
+git diff --name-status --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.txt"
 
 # Create 'deleted.txt' file containing deleted files
 grep '^D' "$CHANGE_DIR/commit.txt" | cut -f2 >"$CHANGE_DIR/deleted.txt"
