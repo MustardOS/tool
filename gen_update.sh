@@ -45,10 +45,13 @@ fi
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
 # Create temporary directory structure for both update archive and diff file stuff
-mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" "$UPDATE_DIR/mnt/mmc/MUOS"
+mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config" "$UPDATE_DIR/mnt/mmc/MUOS"
 
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
+
+# Update backup configs
+rsync -a "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
