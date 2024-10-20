@@ -21,26 +21,24 @@ CHANGE_DIR="$REL_DIR/.CHANGE.$$"
 UPDATE_DIR="$REL_DIR/.UPDATE.$$"
 MU_UDIR="$REL_DIR/UPDATE"
 
+STORAGE_LOCS="bios info/catalogue info/name retroarch info/config info/core info/favourite info/history music save screenshot theme language network syncthing"
+
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
 trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh"' EXIT INT TERM
 
 # Check for at least two arguments - commits and then mount points
 if [ "$#" -lt 2 ]; then
-	printf "Usage: %s <FROM_COMMIT> <TO_COMMIT> <MOUNT_POINT> [MOUNT_POINT ...]\n" "$0" >&2
+	printf "Usage: %s <FROM_COMMIT> <MOUNT_POINT>\n" "$0" >&2
 	exit 1
 fi
 
+MOUNT_POINT="$2"
 FROM_COMMIT="$1"
-TO_COMMIT="$2"
-shift 2
 
-# Collect remaining arguments as mount points
-if [ "$#" -ge 1 ]; then
-	:
-else
-	printf "Error: Missing mount points!\n" >&2
-	exit 1
-fi
+# Get the latest internal commit number - we don't really care much for the frontend commit ID :D
+cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
+TO_COMMIT="$(git rev-parse --short HEAD)"
+cd "$REL_DIR"
 
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
@@ -67,20 +65,35 @@ printf '#!/bin/sh\n' >"update.sh"
 printf "\n. /opt/muos/script/var/func.sh\n" >>"update.sh"
 printf "\nMUOS_MAIN_PATH=\$(GET_VAR \"device\" \"storage/rom/mount\")\n" >>"update.sh"
 
-# Check if there are any deleted files
+# Check for any deleted files
 if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 	{
 		while IFS= read -r FILE; do
 			case "$FILE" in
 				init/*)
 					# Generate deletion commands for both /mnt/mmc and /mnt/sdcard - or whatever is set in device config
-					for MOUNT_POINT in "$@"; do
-						D_PATH="/mnt/$MOUNT_POINT/MUOS/${FILE#init/}"
+					MATCH_FOUND=0
+					for S_LOC in $STORAGE_LOCS; do
+						# Check if the directory part of the file matches STORAGE_LOCS
+						if dirname "$FILE" | grep -q "$S_LOC"; then
+							# If matched, generate deletion command with the storage path
+							D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/$S_LOC}"
+							SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
+							printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
+							MATCH_FOUND=1
+							break
+						fi
+					done
+
+					# If no match in STORAGE_LOCS, fall back to the default path
+					if [ "$MATCH_FOUND" -eq 0 ]; then
+						D_PATH="/mnt/$MOUNT_POINT/${FILE#init/}"
 						SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
 						printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
-					done
+					fi
 					;;
 				*)
+					# For non-init files, default deletion path
 					D_PATH="/opt/muos/$FILE"
 					SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
 					printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
@@ -90,14 +103,13 @@ if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 	} >>"update.sh"
 fi
 
-{
-	printf "\nsed -i '2s/.*/%s/' /opt/muos/config/version.txt" "$TO_COMMIT"
-	printf "\n/opt/muos/script/system/halt.sh reboot"
-} >>"update.sh"
+# Add the halt reboot method - we want to reboot after the update!
+printf "\n/opt/muos/script/system/halt.sh reboot" >>"update.sh"
 
-# Make the 'update.sh' executable and copy it to the archive structure
+# Update version.txt and copy update.sh to the correct directories
+mkdir -p "$UPDATE_DIR/opt/muos/config"
+printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
 chmod +x "update.sh"
-mkdir -p "$UPDATE_DIR/opt"
 cp "update.sh" "$UPDATE_DIR/opt/update.sh"
 
 # Copy added and modified files into the '.update' directory
@@ -106,17 +118,35 @@ while IFS= read -r FILE; do
 	if [ -e "$FILE" ]; then
 		case "$FILE" in
 			init/*)
-				for MOUNT_POINT in "$@"; do
+				FILE_COPIED=0
+				S_=0
+				for _ in $STORAGE_LOCS; do
+					S_LOC=$(echo "$STORAGE_LOCS" | cut -d' ' -f$((S_ + 1)))
+
+					# Check if the directory part of the file matches STORAGE_LOCS
+					if dirname "$FILE" | grep -q "$S_LOC"; then
+						# Replace only the directory part, not the file name!
+						D_PATH="$UPDATE_DIR/run/muos/storage/$S_LOC/${FILE#init/MUOS/$S_LOC}"
+						mkdir -p "$(dirname "$D_PATH")"
+						cp "$FILE" "$D_PATH"
+						FILE_COPIED=1
+						break
+					fi
+
+					S_=$((S_ + 1))
+				done
+
+				# If nothing matches in STORAGE_LOCS then fall back to the default path of the given mount
+				if [ "$FILE_COPIED" -eq 0 ]; then
 					D_PATH="$UPDATE_DIR/mnt/$MOUNT_POINT/${FILE#init/}"
 					mkdir -p "$(dirname "$D_PATH")"
 					cp "$FILE" "$D_PATH"
-				done
+				fi
 				;;
 			*)
 				D_PATH="$UPDATE_DIR/opt/muos/$FILE"
 				mkdir -p "$(dirname "$D_PATH")"
 				cp "$FILE" "$D_PATH"
-
 				;;
 		esac
 	else
