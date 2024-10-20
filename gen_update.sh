@@ -20,6 +20,7 @@ REL_DIR="$(pwd)"
 CHANGE_DIR="$REL_DIR/.CHANGE.$$"
 UPDATE_DIR="$REL_DIR/.UPDATE.$$"
 MU_UDIR="$REL_DIR/UPDATE"
+mkdir "$MU_UDIR"
 
 STORAGE_LOCS="bios info/catalogue info/name retroarch info/config info/core info/favourite info/history music save screenshot theme language network syncthing"
 
@@ -38,6 +39,11 @@ FROM_COMMIT="$1"
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 TO_COMMIT="$(git rev-parse --short HEAD)"
+COMMIT_DATE="$(git show -s --format=%ci "$1")"
+git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
+# Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
+cd "$HOME/$REPO_ROOT/$REPO_FRONTEND"
+git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
 cd "$REL_DIR"
 
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
