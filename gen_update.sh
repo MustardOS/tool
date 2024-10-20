@@ -91,7 +91,6 @@ if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 fi
 
 {
-	printf "\nsed -i '2s/.*/%s/' /opt/muos/config/version.txt" "$TO_COMMIT"
 	printf "\n/opt/muos/script/system/halt.sh reboot"
 } >>"update.sh"
 
@@ -123,6 +122,9 @@ while IFS= read -r FILE; do
 		printf "Warning: File '%s' does not exist and will not be copied!\n" "$FILE"
 	fi
 done <"$CHANGE_DIR/archived.txt"
+
+# Update the version information
+printf '%s\n%s\n' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" > "$UPDATE_DIR/opt/muos/config/version.txt"
 
 cd "$UPDATE_DIR" || exit 1
 find . -name ".gitkeep" -delete
