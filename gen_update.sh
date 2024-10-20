@@ -41,10 +41,19 @@ cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 TO_COMMIT="$(git rev-parse --short HEAD)"
 COMMIT_DATE="$(git show -s --format=%ci "$1")"
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
+git log --since="$COMMIT_DATE" --pretty=format:"%ae" >"$MU_UDIR/contributor.txt"
+printf "\n" >>"$MU_UDIR/changelog.txt"
+printf "\n" >>"$MU_UDIR/contributor.txt"
 # Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
 cd "$HOME/$REPO_ROOT/$REPO_FRONTEND"
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
+git log --since="$COMMIT_DATE" --pretty=format:"%ae" >>"$MU_UDIR/contributor.txt"
 cd "$REL_DIR"
+
+# Update the contributor file with unique users
+TMP_CON=$(mktemp)
+sed -e 's/[0-9]\{1,\}+//g' -e 's/@users\.noreply\.github\.com//g' "$MU_UDIR/contributor.txt" | sort | uniq > "$TMP_CON"
+mv "$TMP_CON" "$MU_UDIR/contributor.txt"
 
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
