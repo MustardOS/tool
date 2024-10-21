@@ -1,6 +1,22 @@
 #!/bin/sh
 
-for CMD in git zip unzip; do
+# Here are all the variables that can and should be changed according to your environment
+# or what type of update this needs to be generated for.
+
+# Version the archive should be set to and the build ID that is required for the update to work
+VERSION="2410.2-BANANA"
+UF_BID="aa34f0b8"
+
+# Update the following to your specific requirements and repository location and folder names
+REPO_ROOT="Repo/MustardOS"
+REPO_FRONTEND="frontend"
+REPO_INTERNAL="internal"
+
+# Anything below this line should not be modified unless required. Seriously!
+# ------------------------------------------------------------------------------------
+
+# Check for all the required commands we'll be using from here on in
+for CMD in git rsync zip unzip sed; do
 	if ! command -v "$CMD" >/dev/null 2>&1; then
 		printf "Error: Missing required command '%s'\n" "$CMD" >&2
 		exit 1
@@ -10,22 +26,17 @@ done
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-VERSION="2410.2-BANANA"
-
-REPO_ROOT="Repo/MustardOS"
-REPO_FRONTEND="frontend"
-REPO_INTERNAL="internal"
-
 REL_DIR="$(pwd)"
 CHANGE_DIR="$REL_DIR/.CHANGE.$$"
 UPDATE_DIR="$REL_DIR/.UPDATE.$$"
 MU_UDIR="$REL_DIR/UPDATE"
-mkdir "$MU_UDIR"
+MU_RARC="$REL_DIR/UPDATE/REC_ARC"
+mkdir -p "$MU_RARC"
 
 STORAGE_LOCS="bios language"
 
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
-trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh"' EXIT INT TERM
+trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh" "$MU_RARC"' EXIT INT TERM
 
 # Check for at least two arguments - commits and then mount points
 if [ "$#" -lt 2 ]; then
@@ -108,7 +119,7 @@ if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 						# Check if the directory part of the file matches STORAGE_LOCS
 						if dirname "$FILE" | grep -q "$S_LOC"; then
 							# If matched, generate deletion command with the storage path
-							D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/$S_LOC}"
+							D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/"$S_LOC"}"
 							SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
 							printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
 							MATCH_FOUND=1
@@ -157,7 +168,7 @@ while IFS= read -r FILE; do
 					# Check if the directory part of the file matches STORAGE_LOCS
 					if dirname "$FILE" | grep -q "$S_LOC"; then
 						# Replace only the directory part, not the file name!
-						D_PATH="$UPDATE_DIR/run/muos/storage/$S_LOC/${FILE#init/MUOS/$S_LOC}"
+						D_PATH="$UPDATE_DIR/run/muos/storage/$S_LOC/${FILE#init/MUOS/"$S_LOC"}"
 						mkdir -p "$(dirname "$D_PATH")"
 						cp "$FILE" "$D_PATH"
 						FILE_COPIED=1
@@ -189,8 +200,35 @@ cd "$UPDATE_DIR" || exit 1
 find . -name ".gitkeep" -delete
 chmod -R 755 .
 chown -R "$(whoami):$(whoami)" ./*
+
+mkdir -p "$MU_RARC/opt/"
+echo "$VERSION ($TO_COMMIT)" | zip -0r -z "$MU_RARC/opt/$ARCHIVE_NAME" .
+cd "$REL_DIR"
+
+# Time to make a recursive archive so that we can check for version information before we try to update!
+# Yes I could have done an EOF but they irk me! So fuck you, printf it is :D
+{
+	printf "#!/bin/sh\n"
+	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
+	printf "\nUPDATE_BUILDID=\"%s\"\n" "$UF_BID"
+	printf "\nif [ \"\$CURR_BUILDID\" = \"\$UPDATE_BUILDID\" ]; then\n"
+	printf "\t# Hopefully this will overwrite this current script!\n"
+	printf "\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
+	printf "else\n"
+	printf "\trm -rf \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
+	printf "\techo \"This update is for BUILD ID of '\$UPDATE_BUILDID' only!\"\n"
+	printf "\techo \"You are currently on '\$CURR_BUILDID'\"\n"
+	printf "\techo \"\"\n"
+	printf "\techo \"If this is a genuine error, please report it!\"\n"
+	printf "\n\tsleep 10\n\n"
+	printf "\t# Self destruct time!\n"
+	printf "\trm -- \"\$0\"\n"
+	printf "fi\n"
+} >"$MU_RARC/opt/update.sh"
+
+cd "$MU_RARC" || exit 1
 echo "$VERSION ($TO_COMMIT)" | zip -0r -z "$MU_UDIR/$ARCHIVE_NAME" .
-cd ..
+cd "$REL_DIR"
 
 unzip -l "$MU_UDIR/$ARCHIVE_NAME"
 printf "\nArchive Created: %s\n" "$MU_UDIR/$ARCHIVE_NAME"
