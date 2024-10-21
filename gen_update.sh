@@ -22,7 +22,7 @@ UPDATE_DIR="$REL_DIR/.UPDATE.$$"
 MU_UDIR="$REL_DIR/UPDATE"
 mkdir "$MU_UDIR"
 
-STORAGE_LOCS="bios info/catalogue info/name retroarch info/config info/core info/favourite info/history music save screenshot theme language network syncthing"
+STORAGE_LOCS="bios language"
 
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
 trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh"' EXIT INT TERM
@@ -61,13 +61,24 @@ mv "$TMP_CON" "$MU_UDIR/contributor.txt"
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
 # Create temporary directory structure for both update archive and diff file stuff
-mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config" "$UPDATE_DIR/mnt/mmc/MUOS"
+mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
+	"$UPDATE_DIR/opt/muos/backup/MUOS/info/config" \
+	"$UPDATE_DIR/opt/muos/backup/MUOS/info/name" \
+	"$UPDATE_DIR/opt/muos/backup/MUOS/retroarch" \
+	"$UPDATE_DIR/opt/muos/backup/MUOS/theme" \
+	"$UPDATE_DIR/mnt/mmc/MUOS"
 
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
-# Update backup configs
-rsync -a "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config/"
+# Update backup configs, names, and retroarch!
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/name/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/backup/MUOS/retroarch/"
+
+# Update both the default theme repository as well as the internal fallback theme!
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/backup/MUOS/theme/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/theme/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
@@ -79,9 +90,11 @@ git diff --name-status --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/co
 grep '^D' "$CHANGE_DIR/commit.txt" | cut -f2 >"$CHANGE_DIR/deleted.txt"
 
 # Create 'update.sh' file at /opt/ so the archive manager can run it
-printf '#!/bin/sh\n' >"update.sh"
-printf "\n. /opt/muos/script/var/func.sh\n" >>"update.sh"
-printf "\nMUOS_MAIN_PATH=\$(GET_VAR \"device\" \"storage/rom/mount\")\n" >>"update.sh"
+{
+	printf "#!/bin/sh\n"
+	printf "\n. /opt/muos/script/var/func.sh\n"
+	printf "\nMUOS_MAIN_PATH=\$(GET_VAR \"device\" \"storage/rom/mount\")\n"
+} >"update.sh"
 
 # Check for any deleted files
 if [ -s "$CHANGE_DIR/deleted.txt" ]; then
@@ -176,8 +189,8 @@ cd "$UPDATE_DIR" || exit 1
 find . -name ".gitkeep" -delete
 chmod -R 755 .
 chown -R "$(whoami):$(whoami)" ./*
-zip -r "$MU_UDIR/$ARCHIVE_NAME" .
+echo "$VERSION ($TO_COMMIT)" | zip -0r -z "$MU_UDIR/$ARCHIVE_NAME" .
 cd ..
 
-printf "Archive Created: %s\n" "$MU_UDIR/$ARCHIVE_NAME"
 unzip -l "$MU_UDIR/$ARCHIVE_NAME"
+printf "\nArchive Created: %s\n" "$MU_UDIR/$ARCHIVE_NAME"
