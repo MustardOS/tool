@@ -18,7 +18,7 @@ REPO_INTERNAL="internal"
 # ------------------------------------------------------------------------------------
 
 # Check for all the required commands we'll be using from here on in
-for CMD in git rsync zip unzip sed; do
+for CMD in git rsync zip unzip sed pv; do
 	if ! command -v "$CMD" >/dev/null 2>&1; then
 		printf "Error: Missing required command '%s'\n" "$CMD" >&2
 		exit 1
@@ -45,6 +45,8 @@ if [ "$#" -lt 2 ]; then
 	printf "Usage: %s <FROM_COMMIT> <MOUNT_POINT>\n" "$0" >&2
 	exit 1
 fi
+
+printf "\n=============== \033[1mmuOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
 
 MOUNT_POINT="$2"
 FROM_COMMIT="$1"
@@ -84,6 +86,7 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
+printf "\033[1mSynchronising default configurations\033[0m\n"
 # Update default configs, names, and retroarch!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
@@ -194,7 +197,7 @@ while IFS= read -r FILE; do
 				;;
 		esac
 	else
-		printf "Warning: File '%s' does not exist and will not be copied!\n" "$FILE"
+		printf "\t\033[1mWarning: File '%s' does not exist and will not be copied!\033[0m\n" "$FILE"
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
@@ -204,7 +207,14 @@ chmod -R 755 .
 chown -R "$(whoami):$(whoami)" ./*
 
 mkdir -p "$MU_RARC/opt/"
-echo "$VERSION ($TO_COMMIT)" | zip -0r -z "$MU_RARC/opt/$ARCHIVE_NAME" .
+
+ZIP_COMMENT="$VERSION ($TO_COMMIT)"
+
+printf "\n\033[1mCreating muOS update archive\033[0m\n"
+echo "$ZIP_COMMENT" |
+	zip -q9r -z - . |
+	pv -bep --width 75 >"$MU_RARC/opt/$ARCHIVE_NAME"
+
 cd "$REL_DIR"
 
 # Time to make a recursive archive so that we can check for version information before we try to update!
@@ -229,11 +239,15 @@ cd "$REL_DIR"
 } >"$MU_RARC/opt/update.sh"
 
 cd "$MU_RARC" || exit 1
-echo "$VERSION ($TO_COMMIT)" | zip -0r -z "$MU_UDIR/$ARCHIVE_NAME" .
+
+printf "\n\033[1mCreating recursive archive for muOS version checking\033[0m\n"
+echo "$ZIP_COMMENT" |
+	zip -q0r -z - . |
+	pv -bep --width 75 >"$MU_UDIR/$ARCHIVE_NAME"
+
 cd "$REL_DIR"
 
-unzip -l "$MU_UDIR/$ARCHIVE_NAME"
-printf "\nArchive Created: %s\n" "$MU_UDIR/$ARCHIVE_NAME"
+printf "\n\033[1mArchive created at\033[0m\n\t%s\n" "$MU_UDIR/$ARCHIVE_NAME"
 
 GH2D_REPLACE() {
 	GH2D_FILE=$(mktemp)
@@ -249,7 +263,5 @@ GH2D_REPLACE jon@bcat.name @bcat
 GH2D_REPLACE joyrider3774@hotmail.com @joyrider3774
 GH2D_REPLACE xonglebongle @xonglebongle
 
-printf "Contributors from '%s' to '%s':\n" "$FROM_COMMIT" "$TO_COMMIT"
-cat "$MU_UDIR/contributor.txt"
-
-printf "\n\nDon't forget to format the changelog file... good luck!\n"
+printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" "$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
+printf "\n\033[1mDon't forget to format the changelog file... good luck!\033[0m\n\n"
