@@ -252,4 +252,4 @@ GH2D_REPLACE xonglebongle @xonglebongle
 printf "Contributors from '%s' to '%s':\n" "$FROM_COMMIT" "$TO_COMMIT"
 cat "$MU_UDIR/contributor.txt"
 
-printf "Don't forget to format the changelog file... good luck!\n"
+printf "\n\nDon't forget to format the changelog file... good luck!\n"
