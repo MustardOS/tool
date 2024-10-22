@@ -47,7 +47,7 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-INTERNAL_STUFF="backup bin browse config device extra init script theme factory.mp3 silence.wav preload.txt"
+INTERNAL_STUFF="bin browse config default device extra init script theme factory.mp3 silence.wav preload.txt"
 for I in $INTERNAL_STUFF; do
 	rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/$I" "$MOUNT_POINT/opt/muos/"
 done
@@ -55,8 +55,11 @@ done
 printf "\n\t\033[1m- Updating muOS Frontend\033[0m\n"
 rsync -a --info=progress2 "$HOME/$REPO_DIR/frontend/bin/" "$MOUNT_POINT/opt/muos/extra/"
 
-printf "\n\t\033[1m- Backing Up Initial Configs\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/backup/MUOS/info/config/"
+printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
+rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
+rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
+rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
+rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 rm -rf "$MOUNT_POINT/opt/muos/.git" \

@@ -73,23 +73,23 @@ ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
 # Create temporary directory structure for both update archive and diff file stuff
 mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
-	"$UPDATE_DIR/opt/muos/backup/MUOS/info/config" \
-	"$UPDATE_DIR/opt/muos/backup/MUOS/info/name" \
-	"$UPDATE_DIR/opt/muos/backup/MUOS/retroarch" \
-	"$UPDATE_DIR/opt/muos/backup/MUOS/theme" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/info/config" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/info/name" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/retroarch" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/theme" \
 	"$UPDATE_DIR/mnt/mmc/MUOS"
 
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
-# Update backup configs, names, and retroarch!
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/config/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/backup/MUOS/info/name/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/backup/MUOS/retroarch/"
+# Update default configs, names, and retroarch!
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
 
 # Update both the default theme repository as well as the internal fallback theme!
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/backup/MUOS/theme/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/theme/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/default/MUOS/theme/"
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/active/" "$UPDATE_DIR/opt/muos/theme/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
