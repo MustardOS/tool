@@ -11,6 +11,7 @@ UF_BID="aa34f0b8"
 REPO_ROOT="Repo/MustardOS"
 REPO_FRONTEND="frontend"
 REPO_INTERNAL="internal"
+REPO_LANGUAGE="language"
 
 # PLEASE NOTE: If you are an active contributor please add yourself to the list at the bottom of the script!
 
@@ -48,11 +49,54 @@ fi
 
 printf "\n=============== \033[1mmuOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
 
+TR_RENAME() {
+	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$REPO_LANGUAGE/$2"
+	printf "\033[1mUpdating '\033[0m%s\033[1m' to '\033[0m%s\033[1m'\033[0m\n" "$1" "$TR_DEST"
+	cp "$1" "$TR_DEST" || printf "\033[1m\t- Failed on '%s'\033[0m\n" "$1"
+}
+
+cd "$HOME/$REPO_ROOT/$REPO_LANGUAGE" || (printf "Language repository missing (%s)" "$REPO_ROOT/$REPO_LANGUAGE" && exit)
+
+printf "\033[1mUpdating languages from '%s' repository\033[0m\n" "$REPO_LANGUAGE"
+git pull
+printf "\n"
+
+cd "mux" || (printf "Languages for component 'muX' missing (%s)" "$REPO_ROOT/$REPO_LANGUAGE/mux" && exit)
+
+# Update these languages as we obtain more of them!
+TR_RENAME "ca.json" "Catalan.json"
+TR_RENAME "ca@valencia.json" "Valencian.json"
+TR_RENAME "cs.json" "Czech.json"
+TR_RENAME "de.json" "German.json"
+TR_RENAME "en.json" "English.json"
+TR_RENAME "en_US.json" "English (American).json"
+TR_RENAME "es.json" "Spanish.json"
+TR_RENAME "fr.json" "French.json"
+TR_RENAME "hi.json" "Hindi.json"
+TR_RENAME "hr.json" "Croatian.json"
+TR_RENAME "it.json" "Italian.json"
+TR_RENAME "ja.json" "Japanese.json"
+TR_RENAME "ko.json" "Korean.json"
+TR_RENAME "nl.json" "Dutch.json"
+TR_RENAME "pl.json" "Polish.json"
+TR_RENAME "pt_BR.json" "Portuguese (BR).json"
+TR_RENAME "pt_PT.json" "Portuguese (PT).json"
+TR_RENAME "ru.json" "Russian.json"
+TR_RENAME "sr.json" "Serbian.json"
+TR_RENAME "sv.json" "Swedish.json"
+TR_RENAME "tr.json" "Turkish.json"
+TR_RENAME "uk.json" "Ukrainian.json"
+TR_RENAME "vi.json" "Vietnamese.json"
+TR_RENAME "zh_Hans.json" "Chinese (Simplified).json"
+TR_RENAME "zh_Hant.json" "Chinese (Traditional).json"
+
+cd "$REL_DIR"
+
 MOUNT_POINT="$2"
 FROM_COMMIT="$1"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
-cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
+cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || (printf "Internal repository missing (%s)" "$REPO_ROOT/$REPO_INTERNAL" && exit)
 TO_COMMIT="$(git rev-parse --short HEAD)"
 COMMIT_DATE="$(git show -s --format=%ci "$1")"
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
@@ -63,7 +107,7 @@ printf "\n" >>"$MU_UDIR/changelog.txt"
 printf "\n" >>"$MU_UDIR/contributor.txt"
 
 # Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
-cd "$HOME/$REPO_ROOT/$REPO_FRONTEND"
+cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || (printf "Frontend repository missing (%s)" "$REPO_ROOT/$REPO_FRONTEND" && exit)
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
 git log --since="$COMMIT_DATE" --pretty=format:"%ae" >>"$MU_UDIR/contributor.txt"
 cd "$REL_DIR"
@@ -86,7 +130,7 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
-printf "\033[1mSynchronising default configurations\033[0m\n"
+printf "\n\033[1mSynchronising default configurations\033[0m\n"
 # Update default configs, names, and retroarch!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
