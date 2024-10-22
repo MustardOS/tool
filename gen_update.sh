@@ -12,6 +12,8 @@ REPO_ROOT="Repo/MustardOS"
 REPO_FRONTEND="frontend"
 REPO_INTERNAL="internal"
 
+# PLEASE NOTE: If you are an active contributor please add yourself to the list at the bottom of the script!
+
 # Anything below this line should not be modified unless required. Seriously!
 # ------------------------------------------------------------------------------------
 
@@ -232,3 +234,22 @@ cd "$REL_DIR"
 
 unzip -l "$MU_UDIR/$ARCHIVE_NAME"
 printf "\nArchive Created: %s\n" "$MU_UDIR/$ARCHIVE_NAME"
+
+GH2D_REPLACE() {
+	GH2D_FILE=$(mktemp)
+	sed -i "s|${1}|${2}|g" "$MU_UDIR/contributor.txt"
+	tr "\n" " " <"$MU_UDIR/contributor.txt" >"$GH2D_FILE" && mv "$GH2D_FILE" "$MU_UDIR/contributor.txt"
+}
+
+# Add to this as required!
+GH2D_REPLACE antiKk @antiKk
+GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
+GH2D_REPLACE J0ttenmiller @j0tt
+GH2D_REPLACE jon@bcat.name @bcat
+GH2D_REPLACE joyrider3774@hotmail.com @joyrider3774
+GH2D_REPLACE xonglebongle @xonglebongle
+
+printf "Contributors from '%s' to '%s':\n" "$FROM_COMMIT" "$TO_COMMIT"
+cat "$MU_UDIR/contributor.txt"
+
+printf "Don't forget to format the changelog file... good luck!\n"
