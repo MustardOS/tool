@@ -195,7 +195,9 @@ fi
 printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
-printf "\n/opt/muos/script/system/halt.sh reboot" >>"update.sh"
+# Redirect the output so fbpad doesn't draw text over the reboot splash screen.
+printf "\n. /opt/muos/script/mux/close_game.sh" >>"update.sh"
+printf "\nHALT_SYSTEM frontend reboot >/dev/null 2>&1" >>"update.sh"
 
 # Update version.txt and copy update.sh to the correct directories
 mkdir -p "$UPDATE_DIR/opt/muos/config"
