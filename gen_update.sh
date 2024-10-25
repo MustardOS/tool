@@ -8,10 +8,10 @@ VERSION="2410.2-BANANA"
 UF_BID="aa34f0b8"
 
 # Update the following to your specific requirements and repository location and folder names
-REPO_ROOT="Repo/MustardOS"
-REPO_FRONTEND="frontend"
-REPO_INTERNAL="internal"
-REPO_LANGUAGE="language"
+REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
+REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
+REPO_INTERNAL="${REPO_INTERNAL:-internal}"
+REPO_LANGUAGE="${REPO_LANGUAGE:-language}"
 
 # PLEASE NOTE: If you are an active contributor please add yourself to the list at the bottom of the script!
 
@@ -50,7 +50,7 @@ fi
 printf "\n=============== \033[1mmuOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
 
 TR_RENAME() {
-	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$REPO_LANGUAGE/$2"
+	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/language/$2"
 	printf "\033[1mUpdating '\033[0m%s\033[1m' to '\033[0m%s\033[1m'\033[0m\n" "$1" "$TR_DEST"
 	cp "$1" "$TR_DEST" || printf "\033[1m\t- Failed on '%s'\033[0m\n" "$1"
 }
