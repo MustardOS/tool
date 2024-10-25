@@ -130,15 +130,12 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
+# Update default configs!
 printf "\n\033[1mSynchronising default configurations\033[0m\n"
-# Update default configs, names, and retroarch!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
-
-# Update both the default theme repository as well as the internal fallback theme!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/default/MUOS/theme/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/active/" "$UPDATE_DIR/opt/muos/theme/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
