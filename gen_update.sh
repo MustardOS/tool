@@ -191,6 +191,9 @@ if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 	} >>"update.sh"
 fi
 
+# Remove the temporary copy of the inner archive.
+printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
+
 # Add the halt reboot method - we want to reboot after the update!
 printf "\n/opt/muos/script/system/halt.sh reboot" >>"update.sh"
 
