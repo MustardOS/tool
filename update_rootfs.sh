@@ -1,6 +1,8 @@
 #!/bin/sh
 
-REPO_DIR="Repo/MustardOS"
+REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
+REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
+REPO_INTERNAL="${REPO_INTERNAL:-internal}"
 
 if [ "$#" -ne 2 ]; then
 	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
@@ -39,7 +41,7 @@ else
 	printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$ROOTFS" "$MOUNT_POINT"
 fi
 
-BUILD_ID=$(git -C "$HOME/$REPO_DIR/internal" rev-parse --short HEAD)
+BUILD_ID=$(git -C "$HOME/$REPO_ROOT/$REPO_INTERNAL" rev-parse --short HEAD)
 printf "\t\033[1m- Using Build ID:\033[0m %s\n" "$BUILD_ID"
 
 rm -rf "$MOUNT_POINT/opt/muos"
@@ -48,17 +50,17 @@ mkdir -p "$MOUNT_POINT/opt/muos"
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
 INTERNAL_STUFF="bin browse config default device extra init script factory.mp3 silence.wav preload.txt"
 for I in $INTERNAL_STUFF; do
-	rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/$I" "$MOUNT_POINT/opt/muos/"
+	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
 done
 
 printf "\n\t\033[1m- Updating muOS Frontend\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/frontend/bin/" "$MOUNT_POINT/opt/muos/extra/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$MOUNT_POINT/opt/muos/extra/"
 
 printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 rm -rf "$MOUNT_POINT/opt/muos/.git" \
