@@ -5,13 +5,13 @@
 
 # Version the archive should be set to and the build ID that is required for the update to work
 VERSION="2410.2-BANANA"
-UF_BID="aa34f0b8"
+UF_BID="472b162|a10951c4|d1bae326"
 
 # Update the following to your specific requirements and repository location and folder names
-REPO_ROOT="Repo/MustardOS"
-REPO_FRONTEND="frontend"
-REPO_INTERNAL="internal"
-REPO_LANGUAGE="language"
+REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
+REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
+REPO_INTERNAL="${REPO_INTERNAL:-internal}"
+REPO_LANGUAGE="${REPO_LANGUAGE:-language}"
 
 # PLEASE NOTE: If you are an active contributor please add yourself to the list at the bottom of the script!
 
@@ -50,7 +50,7 @@ fi
 printf "\n=============== \033[1mmuOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
 
 TR_RENAME() {
-	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$REPO_LANGUAGE/$2"
+	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/language/$2"
 	printf "\033[1mUpdating '\033[0m%s\033[1m' to '\033[0m%s\033[1m'\033[0m\n" "$1" "$TR_DEST"
 	cp "$1" "$TR_DEST" || printf "\033[1m\t- Failed on '%s'\033[0m\n" "$1"
 }
@@ -130,15 +130,12 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 # Update frontend binaries
 rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
+# Update default configs!
 printf "\n\033[1mSynchronising default configurations\033[0m\n"
-# Update default configs, names, and retroarch!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
-
-# Update both the default theme repository as well as the internal fallback theme!
 rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/default/MUOS/theme/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/active/" "$UPDATE_DIR/opt/muos/theme/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
@@ -194,8 +191,13 @@ if [ -s "$CHANGE_DIR/deleted.txt" ]; then
 	} >>"update.sh"
 fi
 
+# Remove the temporary copy of the inner archive.
+printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
+
 # Add the halt reboot method - we want to reboot after the update!
-printf "\n/opt/muos/script/system/halt.sh reboot" >>"update.sh"
+# Redirect the output so fbpad doesn't draw text over the reboot splash screen.
+printf "\n. /opt/muos/script/mux/close_game.sh" >>"update.sh"
+printf "\nHALT_SYSTEM frontend reboot >/dev/null 2>&1" >>"update.sh"
 
 # Update version.txt and copy update.sh to the correct directories
 mkdir -p "$UPDATE_DIR/opt/muos/config"
@@ -266,20 +268,22 @@ cd "$REL_DIR"
 {
 	printf "#!/bin/sh\n"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
-	printf "\nUPDATE_BUILDID=\"%s\"\n" "$UF_BID"
-	printf "\nif [ \"\$CURR_BUILDID\" = \"\$UPDATE_BUILDID\" ]; then\n"
-	printf "\t# Hopefully this will overwrite this current script!\n"
-	printf "\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
-	printf "else\n"
-	printf "\trm -rf \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
-	printf "\techo \"This update is for BUILD ID of '\$UPDATE_BUILDID' only!\"\n"
-	printf "\techo \"You are currently on '\$CURR_BUILDID'\"\n"
-	printf "\techo \"\"\n"
-	printf "\techo \"If this is a genuine error, please report it!\"\n"
-	printf "\n\tsleep 10\n\n"
-	printf "\t# Self destruct time!\n"
-	printf "\trm -- \"\$0\"\n"
-	printf "fi\n"
+	printf "\ncase \"\$CURR_BUILDID\" in\n"
+	printf "\t%s)\n" "$UF_BID"
+	printf "\t\t# Hopefully this will overwrite this current script!\n"
+	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
+	printf "\t\t;;\n"
+	printf "\t*)\n"
+	printf "\t\trm -rf \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
+	printf "\t\techo \"This update is for BUILD ID of '%s' only!\"\n" "$UF_BID"
+	printf "\t\techo \"You are currently on '\$CURR_BUILDID'\"\n"
+	printf "\t\techo \"\"\n"
+	printf "\t\techo \"If this is a genuine error, please report it!\"\n"
+	printf "\n\t\tsleep 10\n\n"
+	printf "\t\t# Self destruct time!\n"
+	printf "\t\trm -- \"\$0\"\n"
+	printf "\t\t;;\n"
+	printf "esac\n"
 } >"$MU_RARC/opt/update.sh"
 
 cd "$MU_RARC" || exit 1

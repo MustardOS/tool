@@ -1,6 +1,8 @@
 #!/bin/sh
 
-REPO_DIR="Repo/MustardOS"
+REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
+REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
+REPO_INTERNAL="${REPO_INTERNAL:-internal}"
 
 if [ "$#" -ne 2 ]; then
 	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
@@ -39,27 +41,26 @@ else
 	printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$ROOTFS" "$MOUNT_POINT"
 fi
 
-printf "\t\033[1m- Calculating Random Checksum\033[0m\n"
-IMG_CS=$(dd if=/dev/urandom bs=1 count=8 2>/dev/null | md5sum | cut -c1-8)
-printf "\t\033[1m- Using Checksum:\033[0m %s\n" "$IMG_CS"
+BUILD_ID=$(git -C "$HOME/$REPO_ROOT/$REPO_INTERNAL" rev-parse --short HEAD)
+printf "\t\033[1m- Using Build ID:\033[0m %s\n" "$BUILD_ID"
 
 rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-INTERNAL_STUFF="bin browse config default device extra init script theme factory.mp3 silence.wav preload.txt"
+INTERNAL_STUFF="bin browse config default device extra init script factory.mp3 silence.wav preload.txt"
 for I in $INTERNAL_STUFF; do
-	rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/$I" "$MOUNT_POINT/opt/muos/"
+	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
 done
 
 printf "\n\t\033[1m- Updating muOS Frontend\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/frontend/bin/" "$MOUNT_POINT/opt/muos/extra/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$MOUNT_POINT/opt/muos/extra/"
 
 printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
-rsync -a --info=progress2 "$HOME/$REPO_DIR/internal/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 rm -rf "$MOUNT_POINT/opt/muos/.git" \
@@ -111,11 +112,11 @@ for IMG in "$DIR"/*.img; do
 		printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/config/device.txt")"
 
 		printf "\t\033[1m- Updating Version Information\033[0m\n"
-		sed -i "2s/.*/$IMG_CS/" "$MOUNT_POINT/opt/muos/config/version.txt" >/dev/null
+		sed -i "2s/.*/$BUILD_ID/" "$MOUNT_POINT/opt/muos/config/version.txt" >/dev/null
 
 		printf "\t\033[1m- Updating Build Identification\033[0m\n"
-		echo "$IMG_CS" >"$DIR/buildID.txt"
-		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$IMG_CS"
+		echo "$BUILD_ID" >"$DIR/buildID.txt"
+		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$BUILD_ID"
 
 		printf "\t\033[1m- Correcting File Permissions\033[0m\n"
 		sudo chmod -R 755 "$MOUNT_POINT/opt/muos"
