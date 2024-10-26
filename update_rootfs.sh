@@ -39,9 +39,8 @@ else
 	printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$ROOTFS" "$MOUNT_POINT"
 fi
 
-printf "\t\033[1m- Calculating Random Checksum\033[0m\n"
-IMG_CS=$(dd if=/dev/urandom bs=1 count=8 2>/dev/null | md5sum | cut -c1-8)
-printf "\t\033[1m- Using Checksum:\033[0m %s\n" "$IMG_CS"
+BUILD_ID=$(git -C "$HOME/$REPO_DIR/internal" rev-parse --short HEAD)
+printf "\t\033[1m- Using Build ID:\033[0m %s\n" "$BUILD_ID"
 
 rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
@@ -111,11 +110,11 @@ for IMG in "$DIR"/*.img; do
 		printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/config/device.txt")"
 
 		printf "\t\033[1m- Updating Version Information\033[0m\n"
-		sed -i "2s/.*/$IMG_CS/" "$MOUNT_POINT/opt/muos/config/version.txt" >/dev/null
+		sed -i "2s/.*/$BUILD_ID/" "$MOUNT_POINT/opt/muos/config/version.txt" >/dev/null
 
 		printf "\t\033[1m- Updating Build Identification\033[0m\n"
-		echo "$IMG_CS" >"$DIR/buildID.txt"
-		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$IMG_CS"
+		echo "$BUILD_ID" >"$DIR/buildID.txt"
+		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$BUILD_ID"
 
 		printf "\t\033[1m- Correcting File Permissions\033[0m\n"
 		sudo chmod -R 755 "$MOUNT_POINT/opt/muos"
