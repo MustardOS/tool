@@ -88,6 +88,11 @@ case $CF-$HT-$VT in
 		HT_OFFSET=-12 # 716
 		VT_OFFSET=-10 # 558
 		;;
+	36-812-756)  # CUBExx
+		CF_OFFSET=1 # 37
+		HT_OFFSET=0 # 812
+		VT_OFFSET=0 # 756
+		;;
 	*)
 		printf "Unrecognized panel configuration! Stopping!\n"
 		exit 0
