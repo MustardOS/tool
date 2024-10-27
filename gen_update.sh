@@ -141,54 +141,67 @@ rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" 
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 
 # Grab the file diff of all changes based on commit to commit
-git diff --name-status --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.txt"
+git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.txt"
 
-# Create 'deleted.txt' file containing deleted files
-grep '^D' "$CHANGE_DIR/commit.txt" | cut -f2 >"$CHANGE_DIR/deleted.txt"
+# Split changes into added/modified files, deleted files, and deleted directories.
+#
+# Mode 10xxxx is file, 04xxxx is directory. (See https://stackoverflow.com/a/8347325/152208)
+# See also "raw output format" in `man git-diff-tree` for more details
+sed -En 's/^:[^ ]* 10[^\t]* (A|M)\t(.*)/\2/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/archived.txt"
+sed -En 's/^:10[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_files.txt"
+sed -En 's/^:04[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_dirs.txt"
 
 # Create 'update.sh' file at /opt/ so the archive manager can run it
-{
-	printf "#!/bin/sh\n"
-	printf "\n. /opt/muos/script/var/func.sh\n"
-	printf "\nMUOS_MAIN_PATH=\$(GET_VAR \"device\" \"storage/rom/mount\")\n"
-} >"update.sh"
+printf '#!/bin/sh\n' >"update.sh"
 
-# Check for any deleted files
-if [ -s "$CHANGE_DIR/deleted.txt" ]; then
-	{
-		while IFS= read -r FILE; do
-			case "$FILE" in
-				init/*)
-					# Generate deletion commands for both /mnt/mmc and /mnt/sdcard - or whatever is set in device config
-					MATCH_FOUND=0
-					for S_LOC in $STORAGE_LOCS; do
-						# Check if the directory part of the file matches STORAGE_LOCS
-						if dirname "$FILE" | grep -q "$S_LOC"; then
-							# If matched, generate deletion command with the storage path
-							D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/"$S_LOC"}"
-							SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-							printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
-							MATCH_FOUND=1
-							break
-						fi
-					done
+# Check for any deleted files and directories
+GEN_DELETES() {
+	TEST="$1" # Existence condition to test before removing (-f, -d, ...)
+	CMD="$2" # Command to perform the removal (rm -f, rmdir, ...)
 
-					# If no match in STORAGE_LOCS, fall back to the default path
-					if [ "$MATCH_FOUND" -eq 0 ]; then
-						D_PATH="/mnt/$MOUNT_POINT/${FILE#init/}"
+	while IFS= read -r FILE; do
+		case "$FILE" in
+			init/*)
+				# Generate deletion commands for the storage mount
+				MATCH_FOUND=0
+				for S_LOC in $STORAGE_LOCS; do
+					# Check if the directory part of the file matches STORAGE_LOCS
+					if dirname "$FILE" | grep -q "$S_LOC"; then
+						# If matched, generate deletion command with the storage path
+						D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/"$S_LOC"}"
 						SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-						printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
+						printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+						MATCH_FOUND=1
+						break
 					fi
-					;;
-				*)
-					# For non-init files, default deletion path
-					D_PATH="/opt/muos/$FILE"
+				done
+
+				# If no match in STORAGE_LOCS, fall back to the default path
+				if [ "$MATCH_FOUND" -eq 0 ]; then
+					D_PATH="/mnt/$MOUNT_POINT/${FILE#init/}"
 					SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-					printf '\n[ -e "%s" ] && rm -f "%s"\n' "$SAFE_D_PATH" "$SAFE_D_PATH"
-					;;
-			esac
-		done <"$CHANGE_DIR/deleted.txt"
-	} >>"update.sh"
+					printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+				fi
+				;;
+			*)
+				# For non-init files, default deletion path
+				D_PATH="/opt/muos/$FILE"
+				SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
+				printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+				;;
+		esac
+	done
+}
+
+if [ -s "$CHANGE_DIR/deleted_files.txt" ]; then
+	printf '\n' >>"update.sh"
+	GEN_DELETES -f 'rm -f' <"$CHANGE_DIR/deleted_files.txt" >>"update.sh"
+fi
+
+if [ -s "$CHANGE_DIR/deleted_dirs.txt" ]; then
+	printf '\n' >>"update.sh"
+	# Print rmdir commands in reverse so we remove foo/bar before foo
+	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d rmdir >>"update.sh"
 fi
 
 # Remove the temporary copy of the inner archive.
@@ -196,17 +209,10 @@ printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
 # Redirect the output so fbpad doesn't draw text over the reboot splash screen.
-printf "\n. /opt/muos/script/mux/close_game.sh" >>"update.sh"
-printf "\nHALT_SYSTEM frontend reboot >/dev/null 2>&1" >>"update.sh"
-
-# Update version.txt and copy update.sh to the correct directories
-mkdir -p "$UPDATE_DIR/opt/muos/config"
-printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
-chmod +x "update.sh"
-cp "update.sh" "$UPDATE_DIR/opt/update.sh"
+printf "\n. /opt/muos/script/mux/close_game.sh\n" >>"update.sh"
+printf "HALT_SYSTEM frontend reboot >/dev/null 2>&1\n" >>"update.sh"
 
 # Copy added and modified files into the '.update' directory
-grep -E '^(A|M)' "$CHANGE_DIR/commit.txt" | cut -f2 >"$CHANGE_DIR/archived.txt"
 while IFS= read -r FILE; do
 	if [ -e "$FILE" ]; then
 		case "$FILE" in
@@ -246,6 +252,12 @@ while IFS= read -r FILE; do
 		printf "\t\033[1mWarning: File '%s' does not exist and will not be copied!\033[0m\n" "$FILE"
 	fi
 done <"$CHANGE_DIR/archived.txt"
+
+# Update version.txt and copy update.sh to the correct directories
+mkdir -p "$UPDATE_DIR/opt/muos/config"
+printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
+chmod +x "update.sh"
+cp "update.sh" "$UPDATE_DIR/opt/update.sh"
 
 cd "$UPDATE_DIR" || exit 1
 find . -name ".gitkeep" -delete
