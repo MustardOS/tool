@@ -212,12 +212,6 @@ printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
 printf "\n. /opt/muos/script/mux/close_game.sh\n" >>"update.sh"
 printf "HALT_SYSTEM frontend reboot >/dev/null 2>&1\n" >>"update.sh"
 
-# Update version.txt and copy update.sh to the correct directories
-mkdir -p "$UPDATE_DIR/opt/muos/config"
-printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
-chmod +x "update.sh"
-cp "update.sh" "$UPDATE_DIR/opt/update.sh"
-
 # Copy added and modified files into the '.update' directory
 while IFS= read -r FILE; do
 	if [ -e "$FILE" ]; then
@@ -258,6 +252,12 @@ while IFS= read -r FILE; do
 		printf "\t\033[1mWarning: File '%s' does not exist and will not be copied!\033[0m\n" "$FILE"
 	fi
 done <"$CHANGE_DIR/archived.txt"
+
+# Update version.txt and copy update.sh to the correct directories
+mkdir -p "$UPDATE_DIR/opt/muos/config"
+printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
+chmod +x "update.sh"
+cp "update.sh" "$UPDATE_DIR/opt/update.sh"
 
 cd "$UPDATE_DIR" || exit 1
 find . -name ".gitkeep" -delete
