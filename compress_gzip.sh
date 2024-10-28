@@ -33,16 +33,14 @@ printf "===============\033[1m Image Compressing \033[0m ===============\n\n"
 
 find "$DIR" -maxdepth 1 -name '*.img' -type f | while IFS= read -r IMG; do
 	IMAGE_FILE="$(basename -s ".img" "$IMG")-$BUILD_ID.img"
-	cp "$IMG" "$COMPRESS_DIR/$IMAGE_FILE"
 
 	COMPRESSED_FILE="$COMPRESS_DIR/$IMAGE_FILE.gz"
 	IMAGE_SIZE=$(echo "$(stat -c%s "$IMG") / 1024 / 1024" | bc)
 
 	printf "\033[1mCompressing:\033[0m %s (%s MB)\n" "$IMAGE_FILE" "$IMAGE_SIZE"
-	zstdmt --progress -T0 --ultra --format=gzip "$COMPRESS_DIR/$IMAGE_FILE" -o "$COMPRESSED_FILE"
-	rm -f "$COMPRESS_DIR/$IMAGE_FILE"
+	pv -bep --width 75 "$IMG" | pigz --best -k >"$COMPRESSED_FILE"
 
-	printf "\033[1mGenerating Torrent:\033[0m "
+	printf "\n\033[1mGenerating Torrent:\033[0m "
 	transmission-create --anonymize \
 		-t "udp://tracker.opentrackr.org:1337/announce" \
 		-t "udp://tracker.torrent.eu.org:451/announce" \
@@ -52,7 +50,7 @@ find "$DIR" -maxdepth 1 -name '*.img' -type f | while IFS= read -r IMG; do
 		-t "udp://opentracker.io:6969/announce" \
 		-o "$COMPRESS_DIR/Torrent/$(basename -s ".img" "$IMAGE_FILE").torrent" "$COMPRESSED_FILE"
 
-	printf "\033[1mCalculating Hash:\033[0m "
+	printf "\n\033[1mCalculating Hash:\033[0m "
 	C_HASH=$(sha256sum "$COMPRESSED_FILE" | awk -v name="$IMAGE_FILE.gz" '{print $1, name}')
 	printf "%s\n\n" "$(printf "%s" "$C_HASH" | awk '{print $1}')"
 	echo "$C_HASH" >>"$COMPRESS_DIR/hash.txt"
