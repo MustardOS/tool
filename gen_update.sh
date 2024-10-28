@@ -147,9 +147,9 @@ git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.t
 #
 # Mode 10xxxx is file, 04xxxx is directory. (See https://stackoverflow.com/a/8347325/152208)
 # See also "raw output format" in `man git-diff-tree` for more details
-sed -En 's/^:[^ ]* 10[^\t]* (A|M)\t(.*)/\2/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/archived.txt"
-sed -En 's/^:10[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_files.txt"
-sed -En 's/^:04[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_dirs.txt"
+sed -En 's/^:[^ ]* 10[^\t]* (A|M)\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/archived.txt"
+sed -En 's/^:10[^\t]* D\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_files.txt"
+sed -En 's/^:04[^\t]* D\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_dirs.txt"
 
 # Create 'update.sh' file at /opt/ so the archive manager can run it
 printf '#!/bin/sh\n' >"update.sh"
