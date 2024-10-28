@@ -204,8 +204,10 @@ if [ -s "$CHANGE_DIR/deleted_dirs.txt" ]; then
 	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d rmdir >>"update.sh"
 fi
 
-# Remove the temporary copy of the inner archive.
+# Remove the temporary copy of the inner archive
+# Mark archive as installed (since we don't ever return to extract.sh)
 printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
+printf "touch "/mnt/%s/MUOS/update/installed/%s.done"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
 # Redirect the output so fbpad doesn't draw text over the reboot splash screen.
