@@ -3,10 +3,6 @@
 # Here are all the variables that can and should be changed according to your environment
 # or what type of update this needs to be generated for.
 
-# Version the archive should be set to and the build ID that is required for the update to work
-VERSION="2410.2-BANANA"
-UF_BID="472b162|a10951c4|d1bae326"
-
 # Update the following to your specific requirements and repository location and folder names
 REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
@@ -94,6 +90,10 @@ cd "$REL_DIR"
 
 MOUNT_POINT="$2"
 FROM_COMMIT="$1"
+
+# Version the archive should be set to and the build ID that is required for the update to work
+VERSION="${VERSON:-2410.2-BANANA}"
+FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || (printf "Internal repository missing (%s)" "$REPO_ROOT/$REPO_INTERNAL" && exit)
@@ -281,13 +281,13 @@ cd "$REL_DIR"
 	printf "#!/bin/sh\n"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
-	printf "\t%s)\n" "$UF_BID"
+	printf "\t%s)\n" "$FROM_BUILDID"
 	printf "\t\t# Hopefully this will overwrite this current script!\n"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
 	printf "\t\trm -rf \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
-	printf "\t\techo \"This update is for BUILD ID of '%s' only!\"\n" "$UF_BID"
+	printf "\t\techo \"This update is for BUILD ID of '%s' only!\"\n" "$FROM_BUILDID"
 	printf "\t\techo \"You are currently on '\$CURR_BUILDID'\"\n"
 	printf "\t\techo \"\"\n"
 	printf "\t\techo \"If this is a genuine error, please report it!\"\n"
