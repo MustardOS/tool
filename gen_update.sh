@@ -207,7 +207,7 @@ fi
 # Remove the temporary copy of the inner archive
 # Mark archive as installed (since we don't ever return to extract.sh)
 printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
-printf "touch "/mnt/%s/MUOS/update/installed/%s.done"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
+printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
 # Redirect the output so fbpad doesn't draw text over the reboot splash screen.
@@ -255,6 +255,10 @@ while IFS= read -r FILE; do
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
+# Always include extract.sh so we extract the inner archive using latest code
+mkdir -p "$UPDATE_DIR/opt/muos/script/mux"
+cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$UPDATE_DIR/opt/muos/script/mux/extract.sh"
+
 # Update version.txt and copy update.sh to the correct directories
 mkdir -p "$UPDATE_DIR/opt/muos/config"
 printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
@@ -284,7 +288,7 @@ cd "$REL_DIR"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
 	printf "\t%s)\n" "$FROM_BUILDID"
-	printf "\t\t# Hopefully this will overwrite this current script!\n"
+	printf "\t\tunzip -o \"/opt/%s\" opt/muos/script/mux/extract.sh -d /\n" "$ARCHIVE_NAME"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
@@ -297,11 +301,6 @@ cd "$REL_DIR"
 	printf "\t\t;;\n"
 	printf "esac\n"
 } >"$MU_RARC/opt/update.sh"
-
-# Include the latest version of extract.sh in the outer archive so we always
-# extract the inner archive with the latest code.
-mkdir -p "$MU_RARC/opt/muos/script/mux"
-cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$MU_RARC/opt/muos/script/mux/extract.sh"
 
 cd "$MU_RARC" || exit 1
 
