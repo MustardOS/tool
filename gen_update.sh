@@ -298,6 +298,11 @@ cd "$REL_DIR"
 	printf "esac\n"
 } >"$MU_RARC/opt/update.sh"
 
+# Include the latest version of extract.sh in the outer archive so we always
+# extract the inner archive with the latest code.
+mkdir -p "$MU_RARC/opt/muos/script/mux"
+cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$MU_RARC/opt/muos/script/mux/extract.sh"
+
 cd "$MU_RARC" || exit 1
 
 printf "\n\033[1mCreating recursive archive for muOS version checking\033[0m\n"
