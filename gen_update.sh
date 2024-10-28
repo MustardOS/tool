@@ -255,8 +255,10 @@ while IFS= read -r FILE; do
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
-# Always include extract.sh so we extract the inner archive using latest code
-mkdir -p "$UPDATE_DIR/opt/muos/script/mux"
+# Manually include pv and extract.sh for a prettier first incremental update :)
+# TODO: Remove this (and the corresponding update.sh line) after we've rolled out a few updates
+mkdir -p "$UPDATE_DIR/opt/muos/bin" "$UPDATE_DIR/opt/muos/script/mux"
+cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/bin/pv" "$UPDATE_DIR/opt/muos/bin/pv"
 cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$UPDATE_DIR/opt/muos/script/mux/extract.sh"
 
 # Update version.txt and copy update.sh to the correct directories
@@ -288,7 +290,7 @@ cd "$REL_DIR"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
 	printf "\t%s)\n" "$FROM_BUILDID"
-	printf "\t\tunzip -o \"/opt/%s\" opt/muos/script/mux/extract.sh -d /\n" "$ARCHIVE_NAME"
+	printf "\t\tunzip -q -o \"/opt/%s\" opt/muos/bin/pv opt/muos/script/mux/extract.sh -d /\n" "$ARCHIVE_NAME"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
