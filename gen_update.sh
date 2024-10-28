@@ -3,10 +3,6 @@
 # Here are all the variables that can and should be changed according to your environment
 # or what type of update this needs to be generated for.
 
-# Version the archive should be set to and the build ID that is required for the update to work
-VERSION="2410.2-BANANA"
-UF_BID="472b162|a10951c4|d1bae326"
-
 # Update the following to your specific requirements and repository location and folder names
 REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
@@ -95,6 +91,10 @@ cd "$REL_DIR"
 MOUNT_POINT="$2"
 FROM_COMMIT="$1"
 
+# Version the archive should be set to and the build ID that is required for the update to work
+VERSION="${VERSON:-2410.2-BANANA}"
+FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
+
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || (printf "Internal repository missing (%s)" "$REPO_ROOT/$REPO_INTERNAL" && exit)
 TO_COMMIT="$(git rev-parse --short HEAD)"
@@ -147,9 +147,9 @@ git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.t
 #
 # Mode 10xxxx is file, 04xxxx is directory. (See https://stackoverflow.com/a/8347325/152208)
 # See also "raw output format" in `man git-diff-tree` for more details
-sed -En 's/^:[^ ]* 10[^\t]* (A|M)\t(.*)/\2/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/archived.txt"
-sed -En 's/^:10[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_files.txt"
-sed -En 's/^:04[^\t]* D\t(.*)/\1/p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_dirs.txt"
+sed -En 's/^:[^ ]* 10[^\t]* (A|M)\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/archived.txt"
+sed -En 's/^:10[^\t]* D\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_files.txt"
+sed -En 's/^:04[^\t]* D\t//p' "$CHANGE_DIR/commit.txt" >"$CHANGE_DIR/deleted_dirs.txt"
 
 # Create 'update.sh' file at /opt/ so the archive manager can run it
 printf '#!/bin/sh\n' >"update.sh"
@@ -204,8 +204,10 @@ if [ -s "$CHANGE_DIR/deleted_dirs.txt" ]; then
 	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d rmdir >>"update.sh"
 fi
 
-# Remove the temporary copy of the inner archive.
+# Remove the temporary copy of the inner archive
+# Mark archive as installed (since we don't ever return to extract.sh)
 printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
+printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
 # Redirect the output so fbpad doesn't draw text over the reboot splash screen.
@@ -253,6 +255,12 @@ while IFS= read -r FILE; do
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
+# Manually include pv and extract.sh for a prettier first incremental update :)
+# TODO: Remove this (and the corresponding update.sh line) after we've rolled out a few updates
+mkdir -p "$UPDATE_DIR/opt/muos/bin" "$UPDATE_DIR/opt/muos/script/mux"
+cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/bin/pv" "$UPDATE_DIR/opt/muos/bin/pv"
+cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$UPDATE_DIR/opt/muos/script/mux/extract.sh"
+
 # Update version.txt and copy update.sh to the correct directories
 mkdir -p "$UPDATE_DIR/opt/muos/config"
 printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
@@ -281,19 +289,17 @@ cd "$REL_DIR"
 	printf "#!/bin/sh\n"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
-	printf "\t%s)\n" "$UF_BID"
-	printf "\t\t# Hopefully this will overwrite this current script!\n"
+	printf "\t%s)\n" "$FROM_BUILDID"
+	printf "\t\tunzip -q -o \"/opt/%s\" opt/muos/bin/pv opt/muos/script/mux/extract.sh -d /\n" "$ARCHIVE_NAME"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
-	printf "\t\trm -rf \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
-	printf "\t\techo \"This update is for BUILD ID of '%s' only!\"\n" "$UF_BID"
+	printf "\t\trm -f \"/opt/%s\"\n\n" "$ARCHIVE_NAME"
+	printf "\t\techo \"This update is for BUILD ID of '%s' only!\"\n" "$FROM_BUILDID"
 	printf "\t\techo \"You are currently on '\$CURR_BUILDID'\"\n"
 	printf "\t\techo \"\"\n"
 	printf "\t\techo \"If this is a genuine error, please report it!\"\n"
 	printf "\n\t\tsleep 10\n\n"
-	printf "\t\t# Self destruct time!\n"
-	printf "\t\trm -- \"\$0\"\n"
 	printf "\t\t;;\n"
 	printf "esac\n"
 } >"$MU_RARC/opt/update.sh"
