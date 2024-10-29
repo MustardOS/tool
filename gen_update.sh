@@ -321,10 +321,12 @@ GH2D_REPLACE() {
 
 # Add to this as required!
 GH2D_REPLACE antiKk @antiKk
+GH2D_REPLACE booYah187 @mattyj513
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE J0ttenmiller @j0tt
 GH2D_REPLACE jon@bcat.name @bcat
 GH2D_REPLACE joyrider3774@hotmail.com @joyrider3774
+GH2D_REPLACE nmqanh@gmail.com @nmqanh
 GH2D_REPLACE xonglebongle @xonglebongle
 
 printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" "$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
