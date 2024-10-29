@@ -210,9 +210,7 @@ printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
 printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
-# Redirect the output so fbpad doesn't draw text over the reboot splash screen.
-printf "\n. /opt/muos/script/mux/close_game.sh\n" >>"update.sh"
-printf "HALT_SYSTEM frontend reboot >/dev/null 2>&1\n" >>"update.sh"
+printf "\n/opt/muos/script/mux/quit.sh reboot frontend\n" >>"update.sh"
 
 # Copy added and modified files into the '.update' directory
 while IFS= read -r FILE; do
