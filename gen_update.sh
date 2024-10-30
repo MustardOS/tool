@@ -157,7 +157,7 @@ printf '#!/bin/sh\n' >"update.sh"
 # Check for any deleted files and directories
 GEN_DELETES() {
 	TEST="$1" # Existence condition to test before removing (-f, -d, ...)
-	CMD="$2" # Command to perform the removal (rm -f, rmdir, ...)
+	CMD="$2"  # Command to perform the removal (rm -f, rmdir, ...)
 
 	while IFS= read -r FILE; do
 		case "$FILE" in
@@ -206,8 +206,10 @@ fi
 
 # Remove the temporary copy of the inner archive
 # Mark archive as installed (since we don't ever return to extract.sh)
-printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME" >>"update.sh"
-printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME" >>"update.sh"
+{
+	printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME"
+	printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME"
+} >>"update.sh"
 
 # Add the halt reboot method - we want to reboot after the update!
 printf "\n/opt/muos/script/mux/quit.sh reboot frontend\n" >>"update.sh"
@@ -274,6 +276,11 @@ mkdir -p "$MU_RARC/opt/"
 
 ZIP_COMMENT="$VERSION ($TO_COMMIT)"
 
+# Trash the active theme since it'll cause some issues
+ACTIVE_THEME="mnt/$MOUNT_POINT/MUOS/theme/active"
+[ -d "$ACTIVE_THEME" ] && rm -rf "$ACTIVE_THEME"
+
+# It's compression time!
 printf "\n\033[1mCreating muOS update archive\033[0m\n"
 echo "$ZIP_COMMENT" |
 	zip -q9r -z - . |
