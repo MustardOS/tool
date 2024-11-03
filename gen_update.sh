@@ -280,6 +280,10 @@ ZIP_COMMENT="$VERSION ($TO_COMMIT)"
 ACTIVE_THEME="mnt/$MOUNT_POINT/MUOS/theme/active"
 [ -d "$ACTIVE_THEME" ] && rm -rf "$ACTIVE_THEME"
 
+# Trash the global config because we don't want to override that
+GLOBAL_CONFIG="opt/muos/config/config.ini"
+[ -e "$GLOBAL_CONFIG" ] && rm -f "$GLOBAL_CONFIG"
+
 # It's compression time!
 printf "\n\033[1mCreating muOS update archive\033[0m\n"
 echo "$ZIP_COMMENT" |
