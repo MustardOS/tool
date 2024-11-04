@@ -92,7 +92,7 @@ MOUNT_POINT="$2"
 FROM_COMMIT="$1"
 
 # Version the archive should be set to and the build ID that is required for the update to work
-VERSION="${VERSON:-2410.2-BANANA}"
+VERSION="${VERSON:-2410.2-BIG.BANANA}"
 FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
@@ -279,10 +279,6 @@ ZIP_COMMENT="$VERSION ($TO_COMMIT)"
 # Trash the active theme since it'll cause some issues
 ACTIVE_THEME="mnt/$MOUNT_POINT/MUOS/theme/active"
 [ -d "$ACTIVE_THEME" ] && rm -rf "$ACTIVE_THEME"
-
-# Trash the global config because we don't want to override that
-GLOBAL_CONFIG="opt/muos/config/config.ini"
-[ -e "$GLOBAL_CONFIG" ] && rm -f "$GLOBAL_CONFIG"
 
 # It's compression time!
 printf "\n\033[1mCreating muOS update archive\033[0m\n"
