@@ -51,40 +51,25 @@ TR_RENAME() {
 	cp "$1" "$TR_DEST" || printf "\033[1m\t- Failed on '%s'\033[0m\n" "$1"
 }
 
-cd "$HOME/$REPO_ROOT/$REPO_LANGUAGE" || (printf "Language repository missing (%s)" "$REPO_ROOT/$REPO_LANGUAGE" && exit)
+cd "$HOME/$REPO_ROOT/$REPO_LANGUAGE" || {
+	printf "Language repository missing (%s)\n" "$REPO_ROOT/$REPO_LANGUAGE"
+	exit 1
+}
 
 printf "\033[1mUpdating languages from '%s' repository\033[0m\n" "$REPO_LANGUAGE"
 git pull
 printf "\n"
 
-cd "mux" || (printf "Languages for component 'muX' missing (%s)" "$REPO_ROOT/$REPO_LANGUAGE/mux" && exit)
+cd "mux" || {
+	printf "Languages for component 'muX' missing (%s)\n" "$REPO_ROOT/$REPO_LANGUAGE/mux"
+	exit 1
+}
 
-# Update these languages as we obtain more of them!
-TR_RENAME "ca.json" "Catalan.json"
-TR_RENAME "ca@valencia.json" "Valencian.json"
-TR_RENAME "cs.json" "Czech.json"
-TR_RENAME "de.json" "German.json"
-TR_RENAME "en.json" "English.json"
-TR_RENAME "en_US.json" "English (American).json"
-TR_RENAME "es.json" "Spanish.json"
-TR_RENAME "fr.json" "French.json"
-TR_RENAME "hi.json" "Hindi.json"
-TR_RENAME "hr.json" "Croatian.json"
-TR_RENAME "it.json" "Italian.json"
-TR_RENAME "ja.json" "Japanese.json"
-TR_RENAME "ko.json" "Korean.json"
-TR_RENAME "nl.json" "Dutch.json"
-TR_RENAME "pl.json" "Polish.json"
-TR_RENAME "pt_BR.json" "Portuguese (BR).json"
-TR_RENAME "pt_PT.json" "Portuguese (PT).json"
-TR_RENAME "ru.json" "Russian.json"
-TR_RENAME "sr.json" "Serbian.json"
-TR_RENAME "sv.json" "Swedish.json"
-TR_RENAME "tr.json" "Turkish.json"
-TR_RENAME "uk.json" "Ukrainian.json"
-TR_RENAME "vi.json" "Vietnamese.json"
-TR_RENAME "zh_Hans.json" "Chinese (Simplified).json"
-TR_RENAME "zh_Hant.json" "Chinese (Traditional).json"
+# Read the mappings from the file and call TR_RENAME for each entry
+while IFS=":" read -r WL_SOURCE FULL_NAME; do
+	[ -z "$WL_SOURCE" ] && continue
+	TR_RENAME "${WL_SOURCE}.json" "${FULL_NAME}.json"
+done <"$REPO_ROOT/$REPO_LANGUAGE/tr_map.txt"
 
 cd "$REL_DIR"
 
@@ -96,7 +81,11 @@ VERSION="${VERSON:-2410.2-BIG.BANANA}"
 FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
-cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || (printf "Internal repository missing (%s)" "$REPO_ROOT/$REPO_INTERNAL" && exit)
+cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || {
+	printf "Internal repository missing (%s)" "$REPO_ROOT/$REPO_INTERNAL"
+	exit 1
+}
+
 TO_COMMIT="$(git rev-parse --short HEAD)"
 COMMIT_DATE="$(git show -s --format=%ci "$1")"
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
@@ -107,7 +96,11 @@ printf "\n" >>"$MU_UDIR/changelog.txt"
 printf "\n" >>"$MU_UDIR/contributor.txt"
 
 # Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
-cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || (printf "Frontend repository missing (%s)" "$REPO_ROOT/$REPO_FRONTEND" && exit)
+cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || {
+	printf "Frontend repository missing (%s)" "$REPO_ROOT/$REPO_FRONTEND"
+	exit 1
+}
+
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
 git log --since="$COMMIT_DATE" --pretty=format:"%ae" >>"$MU_UDIR/contributor.txt"
 cd "$REL_DIR"
@@ -143,9 +136,8 @@ cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 # Grab the file diff of all changes based on commit to commit
 #
 # Filter out init/MUOS/theme/active to avoid messing up the active theme
-git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" | \
-	grep -Ev '^[^	]*	init/MUOS/theme/active($|/)' \
-	>"$CHANGE_DIR/commit.txt"
+git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" |
+	grep -Ev '^[^	]*	init/MUOS/theme/active($|/)' >"$CHANGE_DIR/commit.txt"
 
 # Split changes into added/modified files, deleted files, and deleted directories.
 #
@@ -334,6 +326,7 @@ GH2D_REPLACE J0ttenmiller @j0tt
 GH2D_REPLACE jon@bcat.name @bcat
 GH2D_REPLACE joyrider3774@hotmail.com @joyrider3774
 GH2D_REPLACE nmqanh@gmail.com @nmqanh
+GH2D_REPLACE sebastian.voets@gmail.com @illumini_85
 GH2D_REPLACE xonglebongle @xonglebongle
 
 printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" "$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
