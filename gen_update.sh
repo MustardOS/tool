@@ -321,6 +321,7 @@ GH2D_REPLACE() {
 # Add to this as required!
 GH2D_REPLACE antiKk @antiKk
 GH2D_REPLACE booYah187 @mattyj513
+GH2D_REPLACE cmclark00 @koolkidkorey
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE J0ttenmiller @j0tt
 GH2D_REPLACE jon@bcat.name @bcat
