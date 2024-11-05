@@ -69,7 +69,7 @@ cd "mux" || {
 while IFS=":" read -r WL_SOURCE FULL_NAME; do
 	[ -z "$WL_SOURCE" ] && continue
 	TR_RENAME "${WL_SOURCE}.json" "${FULL_NAME}.json"
-done <"$REPO_ROOT/$REPO_LANGUAGE/tr_map.txt"
+done <"$HOME/$REPO_ROOT/$REPO_LANGUAGE/tr_map.txt"
 
 cd "$REL_DIR"
 
