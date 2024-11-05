@@ -141,7 +141,11 @@ rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" 
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
 
 # Grab the file diff of all changes based on commit to commit
-git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" >"$CHANGE_DIR/commit.txt"
+#
+# Filter out init/MUOS/theme/active to avoid messing up the active theme
+git diff-tree -t --no-renames "$FROM_COMMIT" "$TO_COMMIT" | \
+	grep -Ev '^[^	]*	init/MUOS/theme/active($|/)' \
+	>"$CHANGE_DIR/commit.txt"
 
 # Split changes into added/modified files, deleted files, and deleted directories.
 #
@@ -275,10 +279,6 @@ chown -R "$(whoami):$(whoami)" ./*
 mkdir -p "$MU_RARC/opt/"
 
 ZIP_COMMENT="$VERSION ($TO_COMMIT)"
-
-# Trash the active theme since it'll cause some issues
-ACTIVE_THEME="mnt/$MOUNT_POINT/MUOS/theme/active"
-[ -d "$ACTIVE_THEME" ] && rm -rf "$ACTIVE_THEME"
 
 # It's compression time!
 printf "\n\033[1mCreating muOS update archive\033[0m\n"
