@@ -197,7 +197,7 @@ fi
 if [ -s "$CHANGE_DIR/deleted_dirs.txt" ]; then
 	printf '\n' >>"update.sh"
 	# Print rmdir commands in reverse so we remove foo/bar before foo
-	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d rmdir >>"update.sh"
+	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d 'rmdir 2>/dev/null' >>"update.sh"
 fi
 
 # Remove the temporary copy of the inner archive
