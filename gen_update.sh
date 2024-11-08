@@ -87,13 +87,12 @@ cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || {
 }
 
 TO_COMMIT="$(git rev-parse --short HEAD)"
-COMMIT_DATE="$(git show -s --format=%ci "$1")"
+COMMIT_DATE="$(git show -s --format=%cI "$1")"
+
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
-git log --since="$COMMIT_DATE" --pretty=format:"%ae" >"$MU_UDIR/contributor.txt"
 
 # Got to add a new line here otherwise we get some good ol' funky concatenation happening
 printf "\n" >>"$MU_UDIR/changelog.txt"
-printf "\n" >>"$MU_UDIR/contributor.txt"
 
 # Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
 cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || {
@@ -102,13 +101,8 @@ cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || {
 }
 
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
-git log --since="$COMMIT_DATE" --pretty=format:"%ae" >>"$MU_UDIR/contributor.txt"
-cd "$REL_DIR"
 
-# Update the contributor file with unique users
-TMP_CON=$(mktemp)
-sed -e 's/[0-9]\{1,\}+//g' -e 's/@users\.noreply\.github\.com//g' "$MU_UDIR/contributor.txt" | sort | uniq >"$TMP_CON"
-mv "$TMP_CON" "$MU_UDIR/contributor.txt"
+cd "$REL_DIR"
 
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
 
@@ -125,10 +119,22 @@ rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
 
 # Update default configs!
 printf "\n\033[1mSynchronising default configurations\033[0m\n"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$UPDATE_DIR/opt/muos/default/MUOS/theme/"
+
+# RetroArch Configurations
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
+
+# Friendly Folder Names
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
+
+# RetroArch Assets and whatnot
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
+
+# Pre-installed Themes
+rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" \
+	"$UPDATE_DIR/opt/muos/default/MUOS/theme/"
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
@@ -312,23 +318,57 @@ cd "$REL_DIR"
 
 printf "\n\033[1mArchive created at\033[0m\n\t%s\n" "$MU_UDIR/$ARCHIVE_NAME"
 
-GH2D_REPLACE() {
-	GH2D_FILE=$(mktemp)
-	sed -i "s|${1}|${2}|g" "$MU_UDIR/contributor.txt"
-	tr "\n" " " <"$MU_UDIR/contributor.txt" >"$GH2D_FILE" && mv "$GH2D_FILE" "$MU_UDIR/contributor.txt"
+: >"$MU_UDIR/contributor.txt"
+
+# Get the commits since the date and extract the GitHub user names - API only gives 60 per hour... hmm?
+UPDATE_CONTRIBUTORS() {
+	REPO="$1"
+
+	# Hopefully we aren't going to get 5 pages (that's over 500 commits) for updates...
+	for PAGE in $(seq 1 5); do
+		# Record the initial file size of contributor.txt
+		INITIAL_SIZE=$(wc -c <"$MU_UDIR/contributor.txt" 2>/dev/null || echo 0)
+
+		# Fetch contributors from GitHub with the author login (hopefully this is right) and append to contributor.txt
+		curl -s "https://api.github.com/repos/MustardOS/$REPO/commits?since=$COMMIT_DATE&page=$PAGE&per_page=100" |
+			jq -r '.[].author.login' | sort -u >>"$MU_UDIR/contributor.txt"
+
+		# Check the new file size and compare it with the initial because we are checking pages.
+		# If we go to the next page and the file size isn't different then we just move on.
+		NEW_SIZE=$(wc -c <"$MU_UDIR/contributor.txt" 2>/dev/null || echo 0)
+		[ "$INITIAL_SIZE" -eq "$NEW_SIZE" ] && break
+	done
 }
 
-# Add to this as required!
+GH2D_REPLACE() {
+	GH2D_FILE=$(mktemp)
+
+	sed -i "s|${1}|${2}|g" "$MU_UDIR/contributor.txt"
+	tr " " "\n" <"$MU_UDIR/contributor.txt" | sort -u | tr "\n" " " >"$GH2D_FILE"
+
+	sed -i 's/[[:space:]]*$//' "$GH2D_FILE"
+	mv "$GH2D_FILE" "$MU_UDIR/contributor.txt"
+}
+
+# Update the contributor list
+UPDATE_CONTRIBUTORS "internal"
+UPDATE_CONTRIBUTORS "frontend"
+
+# Add to this as required (GitHub username -> Discord username)
+GH2D_REPLACE abretro @__krt__
 GH2D_REPLACE antiKk @antiKk
 GH2D_REPLACE booYah187 @mattyj513
 GH2D_REPLACE cmclark00 @koolkidkorey
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE J0ttenmiller @j0tt
-GH2D_REPLACE jon@bcat.name @bcat
-GH2D_REPLACE joyrider3774@hotmail.com @joyrider3774
-GH2D_REPLACE nmqanh@gmail.com @nmqanh
-GH2D_REPLACE sebastian.voets@gmail.com @illumini_85
+GH2D_REPLACE bcat @bcat
+GH2D_REPLACE joyrider3774 @joyrider3774
+GH2D_REPLACE nmqanh @nmqanh
+GH2D_REPLACE Illumini85 @illumini_85
+GH2D_REPLACE solojazz @?solojazz?
 GH2D_REPLACE xonglebongle @xonglebongle
 
-printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" "$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
+printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" \
+	"$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
+
 printf "\n\033[1mDon't forget to format the changelog file... good luck!\033[0m\n\n"
