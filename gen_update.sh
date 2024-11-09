@@ -365,7 +365,7 @@ GH2D_REPLACE bcat @bcat
 GH2D_REPLACE joyrider3774 @joyrider3774
 GH2D_REPLACE nmqanh @nmqanh
 GH2D_REPLACE Illumini85 @illumini_85
-GH2D_REPLACE solojazz @?solojazz?
+GH2D_REPLACE solojazz @roastbean
 GH2D_REPLACE xonglebongle @xonglebongle
 
 printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" \
