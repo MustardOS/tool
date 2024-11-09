@@ -89,7 +89,7 @@ cd "$HOME/$REPO_ROOT/$REPO_INTERNAL" || {
 TO_COMMIT="$(git rev-parse --short HEAD)"
 COMMIT_DATE="$(git show -s --format=%cI "$1")"
 
-git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog.txt"
+git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog-$REPO_INTERNAL.txt"
 
 # Got to add a new line here otherwise we get some good ol' funky concatenation happening
 printf "\n" >>"$MU_UDIR/changelog.txt"
@@ -100,7 +100,7 @@ cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || {
 	exit 1
 }
 
-git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog.txt"
+git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog-$REPO_FRONTEND.txt"
 
 cd "$REL_DIR"
 
