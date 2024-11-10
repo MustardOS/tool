@@ -91,9 +91,6 @@ COMMIT_DATE="$(git show -s --format=%cI "$1")"
 
 git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >"$MU_UDIR/changelog-$REPO_INTERNAL.txt"
 
-# Got to add a new line here otherwise we get some good ol' funky concatenation happening
-printf "\n" >>"$MU_UDIR/changelog.txt"
-
 # Now that we have the date from the commit given lets go into the frontend repo and grab the changes there too!
 cd "$HOME/$REPO_ROOT/$REPO_FRONTEND" || {
 	printf "Frontend repository missing (%s)" "$REPO_ROOT/$REPO_FRONTEND"
@@ -359,6 +356,7 @@ GH2D_REPLACE abretro @__krt__
 GH2D_REPLACE antiKk @antiKk
 GH2D_REPLACE booYah187 @mattyj513
 GH2D_REPLACE cmclark00 @koolkidkorey
+GH2D_REPLACE duncanyoyo1 @duncanyoyo1
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE J0ttenmiller @j0tt
 GH2D_REPLACE bcat @bcat
