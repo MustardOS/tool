@@ -355,7 +355,9 @@ UPDATE_CONTRIBUTORS "frontend"
 GH2D_REPLACE abretro @__krt__
 GH2D_REPLACE antiKk @antiKk
 GH2D_REPLACE booYah187 @mattyj513
+GH2D_REPLACE cgimenes @mardeoli
 GH2D_REPLACE cmclark00 @koolkidkorey
+GH2D_REPLACE CometHunter92 @ikaruga921196
 GH2D_REPLACE duncanyoyo1 @duncanyoyo1
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE J0ttenmiller @j0tt
@@ -363,6 +365,7 @@ GH2D_REPLACE bcat @bcat
 GH2D_REPLACE joyrider3774 @joyrider3774
 GH2D_REPLACE nmqanh @nmqanh
 GH2D_REPLACE Illumini85 @illumini_85
+GH2D_REPLACE SamusAranX @gordenfreemant
 GH2D_REPLACE solojazz @roastbean
 GH2D_REPLACE xonglebongle @xonglebongle
 
