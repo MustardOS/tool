@@ -77,7 +77,7 @@ MOUNT_POINT="$2"
 FROM_COMMIT="$1"
 
 # Version the archive should be set to and the build ID that is required for the update to work
-VERSION="${VERSON:-2410.2-BIG.BANANA}"
+VERSION="${VERSON:-"$(head -n 1 "$HOME/$REPO_ROOT/$REPO_INTERNAL/config/version.txt")"}"
 FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
