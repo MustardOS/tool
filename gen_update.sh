@@ -353,6 +353,7 @@ UPDATE_CONTRIBUTORS "frontend"
 
 # Add to this as required (GitHub username -> Discord username)
 GH2D_REPLACE abretro @__krt__
+GH2D_REPLACE AchillesPDX @achillespdx
 GH2D_REPLACE antiKk @antiKk
 GH2D_REPLACE booYah187 @mattyj513
 GH2D_REPLACE cgimenes @mardeoli
