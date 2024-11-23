@@ -90,7 +90,7 @@ for IMG in "$DIR"/*.img; do
 	if [ -f "$IMG" ]; then
 		printf "\033[1mProcessing Image:\033[0m %s\n" "$IMG"
 
-		DEVICE=$(echo "$IMG" | sed -n 's/.*muOS-\([^/]*\)-[0-9]*\.[0-9]*-[^.]*\.img/\1/p')
+		DEVICE=$(echo "$IMG" | sed -n 's/.*muOS-\([^-_]*-[^-_]*\).*\.img/\1/p')
 		if [ -z "$DEVICE" ]; then
 			printf "\t\033[1m- Failed to extract device name from image name\033[0m\n"
 			continue
