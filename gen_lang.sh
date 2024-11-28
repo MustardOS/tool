@@ -20,7 +20,6 @@ echo '{}' >"$TRANSLATIONS_FILE"
 
 SEARCH_TRANSLATIONS_IN_DIRECTORY() {
 	DIRECTORY="$1"
-	SECTION="$2"
 
 	find "$DIRECTORY" -type f -name "*.c" | while read -r FILE; do
 		printf "Processing: %s\n" "$FILE"
@@ -37,6 +36,7 @@ SEARCH_TRANSLATIONS_IN_DIRECTORY() {
 
 		echo "$CONTENT" | grep -oP 'TS\("([^"]+)"\)' | sed 's/TS("\(.*\)")/\1/' | while read -r MATCH; do
 			if ! echo "$MATCH" | grep -qE '^[0-9]+$'; then
+				SECTION="$(basename "$FILE" .c)"
 				printf "\tModule %s: %s\n" "$SECTION" "$MATCH"
 				jq --arg KEY "$MATCH" --arg VAL "$MATCH" --arg SECTION "$SECTION" \
 					'.[$SECTION][$KEY] = $VAL' "$TRANSLATIONS_FILE" >"$TRANSLATIONS_FILE.tmp" &&
@@ -75,14 +75,10 @@ UPDATE_JSON_FILE() {
 	rm "$TEMP_JSON" "$MERGED_JSON"
 }
 
-FOLDER_PATH="$HOME/$REPO_ROOT/$REPO_FRONTEND"/common
-FOLDER=$(basename "$FOLDER_PATH")
-SEARCH_TRANSLATIONS_IN_DIRECTORY "$FOLDER_PATH" "$FOLDER"
-
-for FOLDER_PATH in "$HOME/$REPO_ROOT/$REPO_FRONTEND"/mux*; do
-	if [ -d "$FOLDER_PATH" ]; then
-		FOLDER=$(basename "$FOLDER_PATH")
-		SEARCH_TRANSLATIONS_IN_DIRECTORY "$FOLDER_PATH" "$FOLDER"
+TR_FOLDER="$HOME/$REPO_ROOT/$REPO_FRONTEND"
+for FOLDER in common module; do
+	if [ -d "$TR_FOLDER/$FOLDER" ]; then
+		SEARCH_TRANSLATIONS_IN_DIRECTORY "$TR_FOLDER/$FOLDER"
 	fi
 done
 
