@@ -169,7 +169,7 @@ GEN_DELETES() {
 						# If matched, generate deletion command with the storage path
 						D_PATH="/run/muos/storage/$S_LOC/${FILE#init/MUOS/"$S_LOC"}"
 						SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-						printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+						printf '[ %s "%s" ] && %s "%s" 2>/dev/null\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
 						MATCH_FOUND=1
 						break
 					fi
@@ -179,14 +179,14 @@ GEN_DELETES() {
 				if [ "$MATCH_FOUND" -eq 0 ]; then
 					D_PATH="/mnt/$MOUNT_POINT/${FILE#init/}"
 					SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-					printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+					printf '[ %s "%s" ] && %s "%s" 2>/dev/null\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
 				fi
 				;;
 			*)
 				# For non-init files, default deletion path
 				D_PATH="/opt/muos/$FILE"
 				SAFE_D_PATH=$(printf '%s' "$D_PATH" | sed 's/["\\]/\\&/g')
-				printf '[ %s "%s" ] && %s "%s"\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
+				printf '[ %s "%s" ] && %s "%s" 2>/dev/null\n' "$TEST" "$SAFE_D_PATH" "$CMD" "$SAFE_D_PATH"
 				;;
 		esac
 	done
@@ -200,7 +200,7 @@ fi
 if [ -s "$CHANGE_DIR/deleted_dirs.txt" ]; then
 	printf '\n' >>"update.sh"
 	# Print rmdir commands in reverse so we remove foo/bar before foo
-	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d 'rmdir 2>/dev/null' >>"update.sh"
+	sort -r "$CHANGE_DIR/deleted_dirs.txt" | GEN_DELETES -d 'rmdir' >>"update.sh"
 fi
 
 # Remove the temporary copy of the inner archive
