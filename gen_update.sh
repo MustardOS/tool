@@ -32,7 +32,7 @@ MU_UDIR="$REL_DIR/UPDATE"
 MU_RARC="$REL_DIR/UPDATE/REC_ARC"
 mkdir -p "$MU_RARC"
 
-STORAGE_LOCS="bios language"
+STORAGE_LOCS="application bios emulator language task"
 
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
 trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh" "$MU_RARC"' EXIT INT TERM
@@ -362,6 +362,7 @@ GH2D_REPLACE CometHunter92 @ikaruga921196
 GH2D_REPLACE duncanyoyo1 @duncanyoyo1
 GH2D_REPLACE GrumpyGopher @Bitter_Bizarro
 GH2D_REPLACE hmcneill46 @harryarry
+GH2D_REPLACE J0TK @j0tk
 GH2D_REPLACE J0ttenmiller @j0tt
 GH2D_REPLACE bcat @bcat
 GH2D_REPLACE joyrider3774 @joyrider3774
