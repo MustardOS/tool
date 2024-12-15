@@ -32,7 +32,8 @@ MU_UDIR="$REL_DIR/UPDATE"
 MU_RARC="$REL_DIR/UPDATE/REC_ARC"
 mkdir -p "$MU_RARC"
 
-STORAGE_LOCS="application bios emulator language task"
+# These have to be in a central binded mount otherwise they will be ignored...
+STORAGE_LOCS="bios language"
 
 # Ensure temporary directories are cleaned up on exit - also on ctrl+c and anything else
 trap 'rm -rf "$CHANGE_DIR" "$UPDATE_DIR" "$HOME/$REPO_ROOT/$REPO_INTERNAL/update.sh" "$MU_RARC"' EXIT INT TERM
