@@ -356,6 +356,7 @@ UPDATE_CONTRIBUTORS "frontend"
 GH2D_REPLACE abretro @__krt__
 GH2D_REPLACE AchillesPDX @achillespdx
 GH2D_REPLACE antiKk @antiKk
+GH2D_REPLACE bgelmini @bgelmini
 GH2D_REPLACE booYah187 @mattyj513
 GH2D_REPLACE cgimenes @mardeoli
 GH2D_REPLACE cmclark00 @koolkidkorey
