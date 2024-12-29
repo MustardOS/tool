@@ -373,6 +373,7 @@ GH2D_REPLACE Illumini85 @illumini_85
 GH2D_REPLACE SamusAranX @gordenfreemant
 GH2D_REPLACE solojazz @roastbean
 GH2D_REPLACE xonglebongle @xonglebongle
+GH2D_REPLACE yomama78 @yomama78
 
 printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" \
 	"$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
