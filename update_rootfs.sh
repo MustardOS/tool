@@ -9,6 +9,13 @@ if [ "$#" -ne 2 ]; then
 	exit 1
 fi
 
+for CMD in dd rsync; do
+	if ! command -v "$CMD" >/dev/null 2>&1; then
+		printf "Error: Missing required command '%s'\n" "$CMD" >&2
+		exit 1
+	fi
+done
+
 DIR=$1
 if [ ! -d "$DIR" ]; then
 	printf "No valid image directory found at '%s'\n" "$DIR"
