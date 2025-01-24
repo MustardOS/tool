@@ -55,7 +55,7 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-INTERNAL_STUFF="PortMaster bin browse config default device extra init script factory.mp3 silence.wav preload.txt"
+INTERNAL_STUFF="bin browse config default device extra init media PortMaster script"
 for I in $INTERNAL_STUFF; do
 	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
 done
