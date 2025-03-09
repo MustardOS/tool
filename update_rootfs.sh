@@ -57,37 +57,53 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-INTERNAL_STUFF="bin browse config default device extra init media overlay PortMaster script"
-for I in $INTERNAL_STUFF; do
-	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
+for I in bin browse config default device extra init script share; do
+	rsync -a --info=progress2 \
+		--exclude='.git/' \
+		--exclude='.gitmodules' \
+		--exclude='LICENSE' \
+		--exclude='**/.gitkeep' \
+		"$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
 done
 
-printf "\n\t\033[1m- Updating muOS Frontend\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$MOUNT_POINT/opt/muos/extra/"
+printf "\n"
 
-printf "\n\t\033[1m- Updating muOS Applications\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_APPLICATION/" "$MOUNT_POINT/opt/muos/init/MUOS/application/"
+UPDATE_TASKS="
+Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$MOUNT_POINT/opt/muos/extra/
+Applications|$HOME/$REPO_ROOT/$REPO_APPLICATION/|$MOUNT_POINT/opt/muos/init/MUOS/application/
+Emulators|$HOME/$REPO_ROOT/$REPO_EMULATOR/|$MOUNT_POINT/opt/muos/init/MUOS/emulator/
+"
 
-printf "\n\t\033[1m- Updating muOS Emulators\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_EMULATOR/" "$MOUNT_POINT/opt/muos/init/MUOS/emulator/"
+printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
+	# Skip over empty lines like the first and last ones. I like to keep things tidy!
+	[ -z "$COMPONENT" ] || [ -z "$SRC" ] || [ -z "$DST" ] && continue
 
-printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" "$MOUNT_POINT/opt/muos/default/MUOS/retroarch/"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" "$MOUNT_POINT/opt/muos/default/MUOS/theme/"
+	printf "\t\033[1m- Updating muOS %s\033[0m\n" "$COMPONENT"
+	rsync -a --info=progress2 \
+		--exclude='.git/' \
+		--exclude='.gitmodules' \
+		--exclude='LICENSE' \
+		--exclude='**/.gitkeep' \
+		"$SRC" "$DST"
+	printf "\n"
+done
+
+printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
+
+UPDATE_DEFAULTS="
+info/config|$MOUNT_POINT/opt/muos/default/MUOS/info/config/
+info/name|$MOUNT_POINT/opt/muos/default/MUOS/info/name/
+retroarch|$MOUNT_POINT/opt/muos/default/MUOS/retroarch/
+theme|$MOUNT_POINT/opt/muos/default/MUOS/theme/
+"
+
+echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SUBDIR DST; do
+	[ -z "$SUBDIR" ] || [ -z "$DST" ] && continue
+
+	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/" "$DST"
+done
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
-rm -rf "$MOUNT_POINT/opt/muos/.git" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/application/.git" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/application/.gitmodules" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/application/LICENSE" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/.git" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/.gitmodules" \
-	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/LICENSE" \
-	"$MOUNT_POINT/opt/muos/LICENSE" \
-	"$MOUNT_POINT/opt/muos/README.md" \
-	"$MOUNT_POINT/opt/muos/.gitignore"
 find "$MOUNT_POINT/opt/muos/." -name ".gitkeep" -delete
 
 printf "\t\033[1m- Correcting File Permissions\033[0m\n"
