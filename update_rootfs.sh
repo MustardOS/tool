@@ -3,7 +3,7 @@
 REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
 REPO_INTERNAL="${REPO_INTERNAL:-internal}"
-REPO_APPS="${REPO_APPS:-apps}"
+REPO_APPLICATION="${REPO_APPLICATION:-application}"
 
 if [ "$#" -ne 2 ]; then
 	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
@@ -65,7 +65,7 @@ printf "\n\t\033[1m- Updating muOS Frontend\033[0m\n"
 rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$MOUNT_POINT/opt/muos/extra/"
 
 printf "\n\t\033[1m- Updating muOS Applications\033[0m\n"
-rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_APPS/" "$MOUNT_POINT/opt/muos/init/MUOS/application/"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_APPLICATION/" "$MOUNT_POINT/opt/muos/init/MUOS/application/"
 
 printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
 rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"

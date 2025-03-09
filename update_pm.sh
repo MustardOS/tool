@@ -26,7 +26,7 @@ PM_RUN_URL="https://github.com/PortsMaster/PortMaster-New/releases/latest/downlo
 PM_ZIP_URL="https://github.com/PortsMaster/PortMaster-GUI/releases/latest/download/muos.portmaster.zip"
 PM_MD5_URL="https://github.com/PortsMaster/PortMaster-GUI/releases/latest/download/muos.portmaster.zip.md5"
 
-PM_INTERNAL="$HOME/$REPO_ROOT/$REPO_INTERNAL/PortMaster"
+PM_INTERNAL="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/archive"
 PM_INTERNAL_INIT="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/PortMaster"
 PM_LIB_DIR="$PM_INTERNAL_INIT/libs"
 
