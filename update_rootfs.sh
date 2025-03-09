@@ -4,6 +4,7 @@ REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
 REPO_INTERNAL="${REPO_INTERNAL:-internal}"
 REPO_APPLICATION="${REPO_APPLICATION:-application}"
+REPO_EMULATOR="${REPO_EMULATOR:-emulator}"
 
 if [ "$#" -ne 2 ]; then
 	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
@@ -67,6 +68,9 @@ rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$MOUNT_POINT/o
 printf "\n\t\033[1m- Updating muOS Applications\033[0m\n"
 rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_APPLICATION/" "$MOUNT_POINT/opt/muos/init/MUOS/application/"
 
+printf "\n\t\033[1m- Updating muOS Emulators\033[0m\n"
+rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_EMULATOR/" "$MOUNT_POINT/opt/muos/init/MUOS/emulator/"
+
 printf "\n\t\033[1m- Updating muOS Defaults\033[0m\n"
 rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" "$MOUNT_POINT/opt/muos/default/MUOS/info/config/"
 rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" "$MOUNT_POINT/opt/muos/default/MUOS/info/name/"
@@ -78,6 +82,9 @@ rm -rf "$MOUNT_POINT/opt/muos/.git" \
 	"$MOUNT_POINT/opt/muos/init/MUOS/application/.git" \
 	"$MOUNT_POINT/opt/muos/init/MUOS/application/.gitmodules" \
 	"$MOUNT_POINT/opt/muos/init/MUOS/application/LICENSE" \
+	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/.git" \
+	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/.gitmodules" \
+	"$MOUNT_POINT/opt/muos/init/MUOS/emulator/LICENSE" \
 	"$MOUNT_POINT/opt/muos/LICENSE" \
 	"$MOUNT_POINT/opt/muos/README.md" \
 	"$MOUNT_POINT/opt/muos/.gitignore"
