@@ -62,6 +62,7 @@ for I in bin browse config default device extra init script share; do
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
 		--exclude='LICENSE' \
+		--exclude='README.md' \
 		--exclude='**/.gitkeep' \
 		"$HOME/$REPO_ROOT/$REPO_INTERNAL/$I" "$MOUNT_POINT/opt/muos/"
 done
@@ -83,6 +84,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
 		--exclude='LICENSE' \
+		--exclude='README.md' \
 		--exclude='**/.gitkeep' \
 		"$SRC" "$DST"
 	printf "\n"
