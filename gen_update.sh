@@ -104,7 +104,7 @@ git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog-$R
 
 cd "$REL_DIR"
 
-ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.muxzip"
+ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.muxupd"
 
 # Create temporary directory structure for both update archive and diff file stuff
 mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
