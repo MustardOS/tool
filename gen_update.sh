@@ -8,6 +8,8 @@ REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
 REPO_INTERNAL="${REPO_INTERNAL:-internal}"
 REPO_LANGUAGE="${REPO_LANGUAGE:-language}"
+REPO_APPLICATION="${REPO_APPLICATION:-application}"
+REPO_EMULATOR="${REPO_EMULATOR:-emulator}"
 
 # PLEASE NOTE: If you are an active contributor please add yourself to the list at the bottom of the script!
 
@@ -102,7 +104,7 @@ git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog-$R
 
 cd "$REL_DIR"
 
-ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.zip"
+ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.muxzip"
 
 # Create temporary directory structure for both update archive and diff file stuff
 mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
@@ -110,29 +112,49 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/info/name" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/retroarch" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/theme" \
-	"$UPDATE_DIR/mnt/mmc/MUOS"
+	"$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS"
 
-# Update frontend binaries
-rsync -a "$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/" "$UPDATE_DIR/opt/muos/extra/"
+printf "\n"
 
-# Update default configs!
-printf "\n\033[1mSynchronising default configurations\033[0m\n"
+UPDATE_TASKS="
+Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$UPDATE_DIR/opt/muos/extra/
+Applications|$HOME/$REPO_ROOT/$REPO_APPLICATION/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/application/
+Emulators|$HOME/$REPO_ROOT/$REPO_EMULATOR/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/emulator/
+"
 
-# RetroArch Configurations
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/" \
-	"$UPDATE_DIR/opt/muos/default/MUOS/info/config/"
+printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
+	# Skip over empty lines like the first and last ones. I like to keep things tidy!
+	[ -z "$COMPONENT" ] || [ -z "$SRC" ] || [ -z "$DST" ] && continue
 
-# Friendly Folder Names
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/" \
-	"$UPDATE_DIR/opt/muos/default/MUOS/info/name/"
+	printf "\t\033[1m- Updating muOS %s\033[0m\n" "$COMPONENT"
+	rsync -a --info=progress2 \
+		--exclude='.git/' \
+		--exclude='.gitmodules' \
+		--exclude='LICENSE' \
+		--exclude='README.md' \
+		--exclude='**/.gitkeep' \
+		"$SRC" "$DST"
+	printf "\n"
+done
 
-# RetroArch Assets and whatnot
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/" \
-	"$UPDATE_DIR/opt/muos/default/MUOS/retroarch/"
+printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
 
-# Pre-installed Themes
-rsync -a -c --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/" \
-	"$UPDATE_DIR/opt/muos/default/MUOS/theme/"
+UPDATE_DEFAULTS="
+$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/info/config/
+$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/name/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/info/name/
+$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/retroarch/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/retroarch/
+$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/theme/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/theme/
+"
+
+echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SRC DST; do
+	[ -z "$SRC" ] || [ -z "$DST" ] && continue
+
+	mkdir -p "$DST"
+	rsync -a --info=progress2 "$SRC" "$DST"
+done
+
+printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
+find "$UPDATE_DIR/." -name ".gitkeep" -delete
 
 # Let's go to the internal directory - away we go!
 cd "$HOME/$REPO_ROOT/$REPO_INTERNAL"
@@ -255,12 +277,6 @@ while IFS= read -r FILE; do
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
-# Manually include pv and extract.sh for a prettier first incremental update :)
-# TODO: Remove this (and the corresponding update.sh line) after we've rolled out a few updates
-mkdir -p "$UPDATE_DIR/opt/muos/bin" "$UPDATE_DIR/opt/muos/script/mux"
-cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/bin/pv" "$UPDATE_DIR/opt/muos/bin/pv"
-cp "$HOME/$REPO_ROOT/$REPO_INTERNAL/script/mux/extract.sh" "$UPDATE_DIR/opt/muos/script/mux/extract.sh"
-
 # Update version.txt and copy update.sh to the correct directories
 mkdir -p "$UPDATE_DIR/opt/muos/config"
 printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
@@ -291,7 +307,6 @@ cd "$REL_DIR"
 	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
 	printf "\t%s)\n" "$FROM_BUILDID"
-	printf "\t\tunzip -q -o \"/opt/%s\" opt/muos/bin/pv opt/muos/script/mux/extract.sh -d /\n" "$ARCHIVE_NAME"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
