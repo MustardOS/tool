@@ -80,7 +80,7 @@ MOUNT_POINT="$2"
 FROM_COMMIT="$1"
 
 # Version the archive should be set to and the build ID that is required for the update to work
-VERSION="${VERSON:-"$(head -n 1 "$HOME/$REPO_ROOT/$REPO_INTERNAL/config/version.txt")"}"
+VERSION="${VERSON:-"$(head -n 1 "$HOME/$REPO_ROOT/$REPO_INTERNAL/config/system/version")"}"
 FROM_BUILDID="${FROM_BUILDID:-$(git rev-parse --short "$FROM_COMMIT")}"
 
 # Get the latest internal commit number - we don't really care much for the frontend commit ID :D
@@ -231,10 +231,9 @@ fi
 {
 	printf "\nrm -f \"/opt/%s\"\n" "$ARCHIVE_NAME"
 	printf "touch \"/mnt/%s/MUOS/update/installed/%s.done\"\n" "$MOUNT_POINT" "$ARCHIVE_NAME"
+	printf "\n/opt/muos/script/mux/quit.sh reboot frontend\n"
+	printf "\nwhile read -r _; do :; done\n"
 } >>"update.sh"
-
-# Add the halt reboot method - we want to reboot after the update!
-printf "\n/opt/muos/script/mux/quit.sh reboot frontend\n" >>"update.sh"
 
 # Copy added and modified files into the '.update' directory
 while IFS= read -r FILE; do
@@ -277,9 +276,10 @@ while IFS= read -r FILE; do
 	fi
 done <"$CHANGE_DIR/archived.txt"
 
-# Update version.txt and copy update.sh to the correct directories
-mkdir -p "$UPDATE_DIR/opt/muos/config"
-printf '%s\n%s' "$(printf %s "$VERSION" | tr - ' ')" "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/version.txt"
+# Update version and build and copy update.sh to the correct directories
+mkdir -p "$UPDATE_DIR/opt/muos/config/system"
+printf '%s' "$(printf %s "$VERSION" | tr - ' ')" >"$UPDATE_DIR/opt/muos/config/system/version"
+printf '%s' "$TO_COMMIT" >"$UPDATE_DIR/opt/muos/config/system/build"
 chmod +x "update.sh"
 cp "update.sh" "$UPDATE_DIR/opt/update.sh"
 
@@ -304,10 +304,11 @@ cd "$REL_DIR"
 # Yes I could have done an EOF but they irk me! So fuck you, printf it is :D
 {
 	printf "#!/bin/sh\n"
-	printf "\nCURR_BUILDID=\$(sed -n '2p' /opt/muos/config/version.txt)"
+	printf "\nCURR_BUILDID=\$(cat /opt/muos/config/system/build)"
 	printf "\ncase \"\$CURR_BUILDID\" in\n"
 	printf "\t%s)\n" "$FROM_BUILDID"
 	printf "\t\t/opt/muos/script/mux/extract.sh \"/opt/%s\"\n" "$ARCHIVE_NAME"
+	printf "\n\t\twhile read -r _; do :; done\n\n"
 	printf "\t\t;;\n"
 	printf "\t*)\n"
 	printf "\t\trm -f \"/opt/%s\"\n\n" "$ARCHIVE_NAME"

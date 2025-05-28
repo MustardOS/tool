@@ -119,6 +119,8 @@ printf "\t\033[1m- Unmounting Image\033[0m\n"
 sudo umount "$MOUNT_POINT"
 rmdir "$MOUNT_POINT"
 
+printf "\t\033[1m- All Done!\033[0m\n"
+
 printf "\n==========\033[1m RootFS Processing Complete \033[0m==========\n"
 
 sudo -v
@@ -137,23 +139,33 @@ for IMG in "$DIR"/*.img; do
 			printf "\t\033[1m- Detected Device Type:\033[0m %s\n" "$DEVICE"
 		fi
 
+		printf "\t\033[1m- Copying RootFS:\033[0m '%s' to '%s'\n" "$ROOTFS" "$DEVICE.$ROOTFS"
+		cp "$ROOTFS" "$DEVICE.$ROOTFS" && sync
+
 		MOUNT_POINT=$(mktemp -d)
-		if ! sudo mount -o loop,rw "$ROOTFS" "$MOUNT_POINT"; then
-			printf "\t\033[1m- Failed to mount RootFS:\033[0m '%s' at '%s'\n" "$ROOTFS" "$MOUNT_POINT"
+		if ! sudo mount -o loop,rw "$DEVICE.$ROOTFS" "$MOUNT_POINT"; then
+			printf "\t\033[1m- Failed to mount RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
 			rmdir "$MOUNT_POINT"
 			continue
 		else
-			printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$ROOTFS" "$MOUNT_POINT"
+			printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
 		fi
 
-		printf "\t\033[1m- Updating Device Type\033[0m\n"
-		echo "$DEVICE" | sudo tee "$MOUNT_POINT/opt/muos/config/device.txt" >/dev/null
-		printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/config/device.txt")"
+		printf "\t\033[1m- Removing Other Devices\033[0m\n"
+		DEVICE_LOWER=$(printf "%s" "$DEVICE" | tr '[:upper:]' '[:lower:]')
 
-		printf "\t\033[1m- Updating Version Information\033[0m\n"
-		sed -i "2s/.*/$BUILD_ID/" "$MOUNT_POINT/opt/muos/config/version.txt" >/dev/null
+		for DEV_DIR in "$MOUNT_POINT/opt/muos/device/"*/; do
+			NAME=$(basename "$DEV_DIR")
+			[ "$NAME" != "$DEVICE_LOWER" ] && rm -rf "$DEV_DIR"
+		done
+
+		mv "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"/* "$MOUNT_POINT/opt/muos/device/"
+		rm -rf "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"
+
+		printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/device/config/board/name")"
 
 		printf "\t\033[1m- Updating Build Identification\033[0m\n"
+		printf "%s" "$BUILD_ID" >"$MOUNT_POINT/opt/muos/config/system/build"
 		echo "$BUILD_ID" >"$DIR/buildID.txt"
 		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$BUILD_ID"
 
@@ -171,10 +183,12 @@ for IMG in "$DIR"/*.img; do
 		sudo -v
 
 		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
-		dd if="$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
+		dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
 
-		printf "\n"
+		printf "\t\033[1m- Removing RootFS: '%s'\033[0m\n" "$DEVICE.$ROOTFS"
+		rm -f "$DEVICE.$ROOTFS"
 
+		printf "\t\033[1m- All Done!\033[0m\n\n"
 		sudo -v
 	fi
 done
