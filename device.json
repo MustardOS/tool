@@ -1,0 +1,83 @@
+[
+  {
+    "device": "rg28xx-h",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg34xx-h",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg35xx-2024",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg35xx-h",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg35xx-plus",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg35xx-sp",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg40xx-h",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rg40xx-v",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  },
+  {
+    "device": "rgcubexx-h",
+    "offsets": {
+      "uboot": "0x800",
+      "monitor": "0x100800",
+      "p1": "0x11ac00",
+      "sunxi": "0x11b800"
+    }
+  }
+]
