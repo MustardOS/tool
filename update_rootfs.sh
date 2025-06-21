@@ -89,6 +89,7 @@ done
 printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
 
 UPDATE_DEFAULTS="
+info/assign|$MOUNT_POINT/opt/muos/default/MUOS/info/assign/
 info/config|$MOUNT_POINT/opt/muos/default/MUOS/info/config/
 info/name|$MOUNT_POINT/opt/muos/default/MUOS/info/name/
 retroarch|$MOUNT_POINT/opt/muos/default/MUOS/retroarch/
