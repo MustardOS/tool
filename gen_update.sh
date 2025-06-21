@@ -107,7 +107,7 @@ cd "$REL_DIR"
 ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.muxupd"
 
 # Create temporary directory structure for both update archive and diff file stuff
-mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
+mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/frontend" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/info/config" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/info/name" \
 	"$UPDATE_DIR/opt/muos/default/MUOS/retroarch" \
@@ -117,7 +117,7 @@ mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/extra" \
 printf "\n"
 
 UPDATE_TASKS="
-Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$UPDATE_DIR/opt/muos/extra/
+Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$UPDATE_DIR/opt/muos/frontend/
 Applications|$HOME/$REPO_ROOT/$REPO_APPLICATION/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/application/
 Emulators|$HOME/$REPO_ROOT/$REPO_EMULATOR/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/emulator/
 "

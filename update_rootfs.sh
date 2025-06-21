@@ -68,7 +68,7 @@ done
 printf "\n"
 
 UPDATE_TASKS="
-Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$MOUNT_POINT/opt/muos/extra/
+Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$MOUNT_POINT/opt/muos/frontend/
 "
 
 printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
