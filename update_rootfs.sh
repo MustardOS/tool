@@ -3,8 +3,6 @@
 REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
 REPO_INTERNAL="${REPO_INTERNAL:-internal}"
-REPO_APPLICATION="${REPO_APPLICATION:-application}"
-REPO_EMULATOR="${REPO_EMULATOR:-emulator}"
 
 if [ "$#" -ne 2 ]; then
 	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
@@ -71,8 +69,6 @@ printf "\n"
 
 UPDATE_TASKS="
 Frontend|$HOME/$REPO_ROOT/$REPO_FRONTEND/bin/|$MOUNT_POINT/opt/muos/extra/
-Applications|$HOME/$REPO_ROOT/$REPO_APPLICATION/|$MOUNT_POINT/opt/muos/init/MUOS/application/
-Emulators|$HOME/$REPO_ROOT/$REPO_EMULATOR/|$MOUNT_POINT/opt/muos/init/MUOS/emulator/
 "
 
 printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
