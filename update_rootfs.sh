@@ -55,7 +55,7 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-for I in bin browse config default device extra init kiosk script share; do
+for I in bin browse config default device frontend init kiosk script share; do
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
