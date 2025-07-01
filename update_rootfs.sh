@@ -55,7 +55,7 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-for I in bin browse config default device frontend init kiosk script share; do
+for I in bin browse config default device frontend kiosk script share; do
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -101,6 +101,12 @@ echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SUBDIR DST; do
 
 	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/" "$DST"
 done
+
+printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
+INIT_SRC="$HOME/$REPO_ROOT/$REPO_INTERNAL/init"
+SIZE=$(du -sb "$INIT_SRC" | cut -f1)
+mkdir -p "$MOUNT_POINT/opt/muos/init"
+tar -C "$INIT_SRC" -cf - . | COLUMNS=80 pv -s "$SIZE" | gzip >"$MOUNT_POINT/opt/muos/init/userdata.tar.gz"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 find "$MOUNT_POINT/opt/muos/." -name ".gitkeep" -delete
@@ -182,7 +188,7 @@ for IMG in "$DIR"/*.img; do
 		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
 		dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
 
-		printf "\t\033[1m- Removing RootFS: '%s'\033[0m\n" "$DEVICE.$ROOTFS"
+		printf "\n\t\033[1m- Removing RootFS:\033[0m '%s'\n" "$DEVICE.$ROOTFS"
 		rm -f "$DEVICE.$ROOTFS"
 
 		printf "\t\033[1m- All Done!\033[0m\n\n"
