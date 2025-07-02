@@ -104,9 +104,51 @@ done
 
 printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
 INIT_SRC="$HOME/$REPO_ROOT/$REPO_INTERNAL/init"
-SIZE=$(du -sb "$INIT_SRC" | cut -f1)
+UD_OUTPUT="$MOUNT_POINT/opt/muos/init/userdata.tar.gz"
+
 mkdir -p "$MOUNT_POINT/opt/muos/init"
-tar -C "$INIT_SRC" -cf - . | COLUMNS=80 pv -s "$SIZE" | gzip >"$MOUNT_POINT/opt/muos/init/userdata.tar.gz"
+
+TOTAL_FILES=$(find "$INIT_SRC" -type f | wc -l)
+[ "$TOTAL_FILES" -eq 0 ] && TOTAL_FILES=1
+
+BAR_WIDTH=40
+COUNT=0
+
+tar -C "$INIT_SRC" -cf - . | gzip -9 >"$UD_OUTPUT" &
+TAR_PID=$!
+
+tar -C "$INIT_SRC" -cf - . | tar -tvf - | while read -r _; do
+	COUNT=$((COUNT + 1))
+	PERCENT=$((COUNT * 100 / TOTAL_FILES))
+	FILLED=$((PERCENT * BAR_WIDTH / 100))
+	EMPTY=$((BAR_WIDTH - FILLED))
+
+	BAR=""
+
+	i=0
+	while [ "$i" -lt "$FILLED" ]; do
+		BAR="${BAR}#"
+		i=$((i + 1))
+	done
+
+	i=0
+	while [ "$i" -lt "$EMPTY" ]; do
+		BAR="${BAR} "
+		i=$((i + 1))
+	done
+
+	if [ $PERCENT -gt 100 ]; then
+		printf "\r\t  [%s] 100%% - Finalising" "$BAR"
+	else
+		printf "\r\t  [%s] %3d%%" "$BAR" "$PERCENT"
+	fi
+done
+
+wait "$TAR_PID"
+
+UD_SIZE=$(wc -c <"$UD_OUTPUT")
+UD_MB=$(awk "BEGIN { printf \"%.2f\", $UD_SIZE / 1000000 }")
+printf "\n\t  Compressed to %sMB\n" "$UD_MB"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 find "$MOUNT_POINT/opt/muos/." -name ".gitkeep" -delete
