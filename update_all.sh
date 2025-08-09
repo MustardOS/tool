@@ -10,6 +10,14 @@ printf "Started at: %s\n\n" "$START_TIME"
 DEVICES="A133 H700"
 ERROR=0
 
+COMPRESS_FLAG=0
+for ARG in "$@"; do
+	if [ "$ARG" = "compress" ]; then
+		COMPRESS_FLAG=1
+		break
+	fi
+done
+
 for DEV in $DEVICES; do
 	IMG="${DEV}-ROOTFS.img"
 
@@ -19,11 +27,15 @@ for DEV in $DEVICES; do
 		ERROR=1
 	}
 
-	printf "Compressing Image for %s...\n" "$DEV"
-	./compress_gzip.sh "$DEV" || {
-		printf "\n%s Image Compression Failed\n" "$DEV"
-		ERROR=1
-	}
+	if [ "$COMPRESS_FLAG" -eq 1 ]; then
+		printf "Compressing Image for %s...\n" "$DEV"
+		./compress_gzip.sh "$DEV" || {
+			printf "\n%s Image Compression Failed\n" "$DEV"
+			ERROR=1
+		}
+	else
+		printf "Skipping compression for %s...\n" "$DEV"
+	fi
 done
 
 END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
