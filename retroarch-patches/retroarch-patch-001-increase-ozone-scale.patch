@@ -1,0 +1,28 @@
+--- RetroArch/menu/drivers/ozone.c.orig	2025-08-13 16:59:23.259070472 +1000
++++ RetroArch/menu/drivers/ozone.c	2025-08-13 17:02:12.667530096 +1000
+@@ -9020,11 +9020,11 @@
+    video_driver_get_size(&width, &height);
+ 
+    ozone->last_width                            = width;
+    ozone->last_height                           = height;
+    ozone->last_scale_factor                     = gfx_display_get_dpi_scale(p_disp,
+-         settings, width, height, false, false);
++         settings, width, height, false, false) * 1.7f;
+    ozone->last_thumbnail_scale_factor           = settings->floats.ozone_thumbnail_scale_factor;
+ 
+    ozone->selection_buf_old.list                = NULL;
+    ozone->selection_buf_old.capacity            = 0;
+    ozone->selection_buf_old.size                = 0;
+@@ -10169,11 +10169,11 @@
+       return;
+ 
+    /* Check whether screen dimensions or menu scale
+     * factor have changed */
+    scale_factor               = gfx_display_get_dpi_scale(p_disp, settings,
+-            width, height, false, false);
++            width, height, false, false) * 1.7f;
+    thumbnail_scale_factor     = settings->floats.ozone_thumbnail_scale_factor;
+    padding_factor             = settings->floats.ozone_padding_factor;
+    font_scale_factor_global   = (font_scale == 1) ? (settings->floats.ozone_font_scale_factor_global) : 1.0f;
+    font_scale_factor_title    = (font_scale == 2) ? (settings->floats.ozone_font_scale_factor_title) : 1.0f;
+    font_scale_factor_sidebar  = (font_scale == 2) ? (settings->floats.ozone_font_scale_factor_sidebar) : 1.0f;
