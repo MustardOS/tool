@@ -17,7 +17,7 @@ RESET='\033[0m'
 
 USAGE() {
 	printf "Usage: %s -m <mapping.csv> -w <width[,width2,...]> [-s <dir>] [-o <output_dir>]\n" "$0"
-	printf "  -m, --map      CSV mapping file with columns: MUX_MODULE,MUX_GLYPH,PNG_ICON (relative to script dir)\n"
+	printf "  -m, --map      CSV mapping file with columns: MUX_MODULE,MUX_GLYPH,PNG_ICONS (relative to script dir)\n"
 	printf "  -w, --width    Widths: a single value or comma/space-separated list (e.g. 24,48)\n"
 	printf "  -s, --search   Root directory to search for PNG files (defaults to script dir)\n" >&2
 	printf "  -o, --output   Output directory root (defaults to <script_dir>/output)\n"
@@ -157,7 +157,7 @@ for W in $WIDTH_LIST; do
 			PNG_ICONS=$(printf "%s" "$PNG_ICONS" | tr -d '\r')
 
 			[ -n "$MUX_MODULE" ] || continue
-			case "$MUX_MODULE" in \#* | "Module") continue ;; esac
+			case "$MUX_MODULE" in \#* | "MUX_MODULE") continue ;; esac
 
 			DST_DIR="$OUT_DIR/$W/$MUX_MODULE"
 			mkdir -p "$DST_DIR" || {
