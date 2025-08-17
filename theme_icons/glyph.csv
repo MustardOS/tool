@@ -35,6 +35,7 @@ muxbackup,core,box-cube-3D
 muxbackup,external,triangle-2
 muxbackup,history,history-page
 muxbackup,language,globe-2
+muxbackup,muosconfig,game-console-handheld
 muxbackup,music,music
 muxbackup,name,letter-blocks
 muxbackup,network,home-wifi-1
@@ -78,8 +79,10 @@ muxcustom,catalogue,book-open
 muxcustom,chime,bell-1
 muxcustom,config,sliders-horizontal-square-2
 muxcustom,font,font-square
+muxcustom,launchswap,arrow-square-down
 muxcustom,music,music
 muxcustom,resolution,monitor-gear
+muxcustom,shuffle,shuffle
 muxcustom,sound,volume-1
 muxcustom,splash,frame-image
 muxcustom,theme,colour-palette-3
@@ -165,6 +168,7 @@ muxkiosk,storage,storage-hdd-2
 muxkiosk,tag,label-list
 muxkiosk,task,screwdriver-wrench-3
 muxkiosk,theme,colour-palette-3
+muxkiosk,themedown,download-circle-1
 muxkiosk,timezone,map-marker-7
 muxkiosk,visual,sliders-horizontal-square-2
 muxkiosk,webserv,connected-nodes
@@ -234,10 +238,10 @@ muxsearch,global,globe-2
 muxsearch,local,folder-iot-3
 muxsearch,lookup,keyboard
 muxshot,screenshot,camera-scan
-muxspace,rfs,storage-hdd-2
-muxspace,sd1,storage-ssd-1
-muxspace,sd2,storage-ssd-1
-muxspace,usb,storage-pen-drive-2
+muxspace,system,storage-hdd-2
+muxspace,primary,storage-ssd-1
+muxspace,secondary,storage-ssd-1
+muxspace,external,storage-pen-drive-2
 muxstorage,bios,chip-beat
 muxstorage,catalogue,book-open
 muxstorage,collection,star-fat
@@ -314,6 +318,7 @@ muxtweakadv,lidswitch,laptop-2
 muxtweakadv,lock,locked-2
 muxtweakadv,offset,battery-plus-minus
 muxtweakadv,overdrive,gear-sound
+muxtweakadv,retrofree,ghost
 muxtweakadv,retrowait,timer-quarter
 muxtweakadv,rumble,phone-vibration-1
 muxtweakadv,secondpart,hdd-code-1
@@ -353,4 +358,5 @@ muxwebserv,ntp,computer-time
 muxwebserv,sftpgo,monitor-refresh-clockwise
 muxwebserv,sshd,terminal-square
 muxwebserv,syncthing,refresh-circle-1-clockwise
+muxwebserv,tailscaled,computer-cloud
 muxwebserv,ttyd,laptop-code
