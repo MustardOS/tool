@@ -1,0 +1,47 @@
+--- ppsspp/CMakeLists.txt.orig	2025-08-17 10:40:19.229485115 +1000
++++ ppsspp/CMakeLists.txt	2025-08-17 11:53:19.250949229 +1000
+@@ -1647,10 +1647,23 @@
+ set(ATOMIC_LIB)
+ if(ANDROID OR (LINUX AND ARM_DEVICE) OR (LINUX AND RISCV64) OR (LINUX AND LOONGARCH64))
+ 	set(ATOMIC_LIB atomic)
+ endif()
+ 
++# Ensure SDL2_ttf::SDL2_ttf exists, even if find_package failed
++find_package(SDL2_ttf QUIET)
++
++if (NOT TARGET SDL2_ttf::SDL2_ttf)
++    message(STATUS "SDL2_ttf package not found, creating imported target manually")
++
++    add_library(SDL2_ttf::SDL2_ttf UNKNOWN IMPORTED)
++    set_target_properties(SDL2_ttf::SDL2_ttf PROPERTIES
++        IMPORTED_LOCATION "${CMAKE_SYSROOT}/usr/lib/libSDL2_ttf.so"
++        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SYSROOT}/usr/include/SDL2"
++    )
++endif()
++
+ target_link_libraries(native ${LIBZIP_LIBRARY} ${PNG_LIBRARIES} ${BASISU_LIBRARIES} ${ZLIB_LIBRARY} vma gason udis86 ${RT_LIB} ${nativeExtraLibs} ${ATOMIC_LIB} Common)
+ if(TARGET Ext::GLEW)
+ 	target_link_libraries(native Ext::GLEW)
+ endif()
+ 
+@@ -2931,11 +2944,19 @@
+ 		add_executable(${TargetBin} ${NativeAppSource})
+ 	endif()
+ 	if(ANDROID AND ARM64)
+ 		target_link_options(${TargetBin} PRIVATE "-Wl,-z,max-page-size=16384")
+ 	endif()
+-	target_link_libraries(${TargetBin} ${LinkCommon} Common)
++	target_link_libraries(${TargetBin}
++		${LinkCommon}
++		Common
++		SDL2
++		SDL2_ttf::SDL2_ttf
++		${CMAKE_SYSROOT}/usr/lib/libEGL.so
++    	${CMAKE_SYSROOT}/usr/lib/libGLESv2.so
++    	${CMAKE_SYSROOT}/usr/lib/libvulkan.so
++	)
+ endif()
+ 
+ # installs
+ if(NOT ANDROID)
+ 	file(INSTALL ${BigFontAssets} DESTINATION assets)
