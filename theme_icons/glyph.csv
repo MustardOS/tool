@@ -17,8 +17,11 @@ muxapp,portmaster,ship-2
 muxapp,ppsspp,game-pad-modern-1
 muxapp,retroarch,ghost
 muxapp,rgbcontroller,bulb-3
+muxapp,scummvm,scummvm
 muxapp,task,screwdriver-wrench-3
 muxapp,terminal,terminal-square
+muxappcon,control,game-pad
+muxappcon,governor,chip-2
 muxarchive,archive,box-archive-1
 muxarchive,installed,box-check-circle
 muxassign,core,box-cube-3D
@@ -79,7 +82,7 @@ muxcustom,catalogue,book-open
 muxcustom,chime,bell-1
 muxcustom,config,sliders-horizontal-square-2
 muxcustom,font,font-square
-muxcustom,launchswap,arrow-square-down
+muxcustom,launch_swap,arrow-square-down
 muxcustom,music,music
 muxcustom,resolution,monitor-gear
 muxcustom,shuffle,shuffle
@@ -168,7 +171,7 @@ muxkiosk,storage,storage-hdd-2
 muxkiosk,tag,label-list
 muxkiosk,task,screwdriver-wrench-3
 muxkiosk,theme,colour-palette-3
-muxkiosk,themedown,download-circle-1
+muxkiosk,theme_down,download-circle-1
 muxkiosk,timezone,map-marker-7
 muxkiosk,visual,sliders-horizontal-square-2
 muxkiosk,webserv,connected-nodes
@@ -212,8 +215,10 @@ muxoption,rom,browser-1
 muxoption,search,search-list
 muxoption,tag,label-list
 muxoption,time,clock-eight
+muxoption,count,stopwatch-beat-2
 muxpicker,catalogue,book-open
 muxpicker,config,screwdriver-wrench-3
+muxpicker,download,download-circle-1
 muxpicker,folder,folder-1
 muxpicker,theme,colour-palette-3
 muxplore,collection,browser-star
@@ -274,6 +279,7 @@ muxsysinfo,temp,thermometer-progress-full-2
 muxsysinfo,uptime,stopwatch
 muxsysinfo,version,server-1
 muxsysinfo,voltage,battery-plus-minus
+muxsysinfo,refresh,refresh-circle-1-clockwise
 muxtag,abandoned,xmark-circle
 muxtag,alternate,browser-tabs
 muxtag,backlog,box-time
@@ -301,8 +307,8 @@ muxtask,sdcard,storage-ssd-1
 muxtask,star,star-fat
 muxtask,theme,colour-palette-3
 muxtheme,theme,colour-palette-3
-muxthemedownloader,theme_downloaded,box-check-circle
-muxthemedownloader,theme,box-download
+muxthemedown,theme_down,box-check-circle
+muxthemedown,theme,box-download
 muxthemefilter,grid,layout-5
 muxthemefilter,hdmi,tv-crt
 muxthemefilter,language,globe-2
