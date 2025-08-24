@@ -32,7 +32,7 @@ PM_LIB_DIR="$PM_INTERNAL_INIT/libs"
 
 PM_TEMP_DIR=$(mktemp -d)
 
-printf "\n=============== %b%b muOS PortMaster Updater (MUPMU) %b===============\n\n" "$BLUE" "$BOLD" "$RESET"
+printf "\n=============== %b%b MustardOS PortMaster Updater (MUPMU) %b===============\n\n" "$BLUE" "$BOLD" "$RESET"
 
 printf "%b%b- Deleting%b %s\n" "$YELLOW" "$BOLD" "$RESET" "${PM_INTERNAL_INIT#$HOME/$REPO_ROOT/}"
 rm -rf "$PM_INTERNAL_INIT"

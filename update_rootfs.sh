@@ -54,7 +54,7 @@ printf "\t\033[1m- Using Build ID:\033[0m %s\n" "$BUILD_ID"
 rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
-printf "\t\033[1m- Updating muOS Internals\033[0m\n"
+printf "\t\033[1m- Updating MustardOS Internals\033[0m\n"
 for I in bin browse config default device frontend kiosk script share; do
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
@@ -75,7 +75,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	# Skip over empty lines like the first and last ones. I like to keep things tidy!
 	[ -z "$COMPONENT" ] || [ -z "$SRC" ] || [ -z "$DST" ] && continue
 
-	printf "\t\033[1m- Updating muOS %s\033[0m\n" "$COMPONENT"
+	printf "\t\033[1m- Updating MustardOS %s\033[0m\n" "$COMPONENT"
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -86,7 +86,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	printf "\n"
 done
 
-printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
+printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
 UPDATE_DEFAULTS="
 info/assign|$MOUNT_POINT/opt/muos/default/MUOS/info/assign/

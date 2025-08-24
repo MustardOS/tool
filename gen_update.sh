@@ -46,7 +46,7 @@ if [ "$#" -lt 2 ]; then
 	exit 1
 fi
 
-printf "\n=============== \033[1mmuOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
+printf "\n=============== \033[1mMustardOS Update Automation Utility (MUAU)\033[0m ==============\n\n"
 
 TR_RENAME() {
 	TR_DEST="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/language/$2"
@@ -104,7 +104,7 @@ git log --since="$COMMIT_DATE" --pretty=format:"%s%n%b" >>"$MU_UDIR/changelog-$R
 
 cd "$REL_DIR"
 
-ARCHIVE_NAME="muOS-$VERSION-$TO_COMMIT-UPDATE.muxupd"
+ARCHIVE_NAME="MustardOS-$VERSION-$TO_COMMIT-UPDATE.muxupd"
 
 # Create temporary directory structure for both update archive and diff file stuff
 mkdir -p "$MU_UDIR" "$CHANGE_DIR" "$UPDATE_DIR/opt/muos/frontend" \
@@ -126,7 +126,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	# Skip over empty lines like the first and last ones. I like to keep things tidy!
 	[ -z "$COMPONENT" ] || [ -z "$SRC" ] || [ -z "$DST" ] && continue
 
-	printf "\t\033[1m- Updating muOS %s\033[0m\n" "$COMPONENT"
+	printf "\t\033[1m- Updating MustardOS %s\033[0m\n" "$COMPONENT"
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -137,7 +137,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	printf "\n"
 done
 
-printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
+printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
 UPDATE_DEFAULTS="
 $HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/info/config/|$UPDATE_DIR/mnt/$MOUNT_POINT/MUOS/info/config/
@@ -293,7 +293,7 @@ mkdir -p "$MU_RARC/opt/"
 ZIP_COMMENT="$VERSION ($TO_COMMIT)"
 
 # It's compression time!
-printf "\n\033[1mCreating muOS update archive\033[0m\n"
+printf "\n\033[1mCreating MustardOS update archive\033[0m\n"
 echo "$ZIP_COMMENT" |
 	zip -q9r -z - . |
 	pv -bep --width 75 >"$MU_RARC/opt/$ARCHIVE_NAME"
@@ -323,7 +323,7 @@ cd "$REL_DIR"
 
 cd "$MU_RARC" || exit 1
 
-printf "\n\033[1mCreating recursive archive for muOS version checking\033[0m\n"
+printf "\n\033[1mCreating recursive archive for MustardOS version checking\033[0m\n"
 echo "$ZIP_COMMENT" |
 	zip -q0r -z - . |
 	pv -bep --width 75 >"$MU_UDIR/$ARCHIVE_NAME"
@@ -391,7 +391,7 @@ GH2D_REPLACE solojazz @roastbean
 GH2D_REPLACE xonglebongle @xonglebongle
 GH2D_REPLACE yomama78 @yomama78
 
-printf "\n\033[1mmuOS contributors from '%s' to '%s'\033[0m\n\t%s\n" \
+printf "\n\033[1mMustardOS contributors from '%s' to '%s'\033[0m\n\t%s\n" \
 	"$FROM_COMMIT" "$TO_COMMIT" "$(cat "$MU_UDIR/contributor.txt")"
 
 printf "\n\033[1mDon't forget to format the changelog file... good luck!\033[0m\n\n"

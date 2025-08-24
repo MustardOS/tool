@@ -4,7 +4,7 @@
 
 # ==== About ====
 # Retroarch build script for MustardOS
-# Created specifically for muOS 2508.0 Goose
+# Created specifically for MustardOS 2508.0 Goose
 # This assumes you have a Cross Compile environment setup with appropriate toolchains.
 
 # Stop if any command fails
@@ -107,7 +107,7 @@ make -j"$(nproc)"
 echo "[7/8] Stripping Retroarch binary..."
 $STRIP "retroarch"
 
-echo "[8/8] Calculate MD5 and rename for muOS"
+echo "[8/8] Calculate MD5 and rename for MustardOS"
 mv "retroarch" "$RA_BIN"
 md5sum "$RA_BIN" | cut -d ' ' -f 1 > "$RA_BIN.md5"
 

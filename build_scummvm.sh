@@ -4,7 +4,7 @@
 
 # ==== About ====
 # ScummVM build script for MustardOS
-# Created specifically for muOS 2508.0 Goose
+# Created specifically for MustardOS 2508.0 Goose
 # This assumes you have a Cross Compile environment setup with appropriate toolchains.
 
 # Stop if any command fails
@@ -78,7 +78,7 @@ make -j"$(nproc)"
 echo "[5/7] Stripping ScummVM binary..."
 $STRIP "scummvm"
 
-echo "[6/7] Calculate MD5 and rename for muOS"
+echo "[6/7] Calculate MD5 and rename for MustardOS"
 mv "scummvm" "$SVM_BIN"
 md5sum "$SVM_BIN" | cut -d ' ' -f 1 > "$SVM_BIN.md5"
 

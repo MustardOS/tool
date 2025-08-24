@@ -1,6 +1,6 @@
 #!/bin/sh
 
-printf "\nmuOS Boot Package Tool\n\n"
+printf "\nMustardOS Boot Package Tool\n\n"
 
 USAGE() {
 	echo "Usage: $0 [options]"
