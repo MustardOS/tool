@@ -89,17 +89,25 @@ done
 printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
 UPDATE_DEFAULTS="
+emulator/retroarch|$MOUNT_POINT/opt/muos/default/MUOS/emulator/retroarch/
 info/assign|$MOUNT_POINT/opt/muos/default/MUOS/info/assign/
 info/config|$MOUNT_POINT/opt/muos/default/MUOS/info/config/
 info/name|$MOUNT_POINT/opt/muos/default/MUOS/info/name/
-retroarch|$MOUNT_POINT/opt/muos/default/MUOS/retroarch/
 theme|$MOUNT_POINT/opt/muos/default/MUOS/theme/
 "
 
 echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SUBDIR DST; do
 	[ -z "$SUBDIR" ] || [ -z "$DST" ] && continue
 
-	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/" "$DST"
+	OG_INIT="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/"
+	if [ -d "$OG_INIT" ]; then
+		rsync -a --info=progress2 "$OG_INIT" "$DST"
+	else
+		OG_SHAR="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/$SUBDIR/"
+		if [ -d "$OG_SHAR" ]; then
+			rsync -a --info=progress2 "$OG_SHAR" "$DST"
+		fi
+	fi
 done
 
 printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
@@ -228,7 +236,8 @@ for IMG in "$DIR"/*.img; do
 		sudo -v
 
 		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
-		dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
+		pv "$DEVICE.$ROOTFS" | dd of="$IMG" bs=12M seek=13 conv=notrunc,noerror,fsync status=none
+		# dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
 
 		printf "\n\t\033[1m- Removing RootFS:\033[0m '%s'\n" "$DEVICE.$ROOTFS"
 		rm -f "$DEVICE.$ROOTFS"
