@@ -1,0 +1,484 @@
+--- RetroArch/input/drivers_joypad/udev_joypad.c.orig	2025-08-16 22:16:50.676168437 -0400
++++ RetroArch/input/drivers_joypad/udev_joypad.c	2025-08-16 22:43:42.321320552 -0400
+@@ -17,10 +17,11 @@
+ #include <stdint.h>
+ #include <unistd.h>
+ #include <string.h>
+ #include <limits.h>
+ #include <fcntl.h>
++#include <errno.h>
+ 
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <poll.h>
+ #include <libudev.h>
+@@ -87,10 +88,17 @@
+ 
+    char ident[NAME_MAX_LENGTH];
+    bool has_set_ff[2];
+    /* Deal with analog triggers that report -32767 to 32767 */
+    bool neg_trigger[NUM_AXES];
++   
++   /* PWM rumble support for handheld devices */
++   bool pwm_rumble_available;
++   int pwm_period_fd;
++   int pwm_duty_fd;
++   int pwm_enable_fd;
++   uint16_t pwm_current_strength;
+ };
+ 
+ struct joypad_udev_entry
+ {
+    const char *devnode;
+@@ -147,40 +155,197 @@
+ error:
+    close(fd);
+    return -1;
+ }
+ 
+-#ifndef HAVE_LAKKA_SWITCH
++/* PWM rumble support for handheld devices */
++static bool udev_pwm_rumble_init(struct udev_joypad *pad)
++{
++   RARCH_LOG("[udev] DEBUG: Attempting to initialize PWM rumble\n");
++   
++   /* Check if PWM rumble is available by trying to open PWM sysfs files */
++   pad->pwm_period_fd = open("/sys/class/pwm/pwmchip0/pwm0/period", O_WRONLY);
++   RARCH_LOG("[udev] DEBUG: PWM period fd: %d\n", pad->pwm_period_fd);
++   
++   pad->pwm_duty_fd = open("/sys/class/pwm/pwmchip0/pwm0/duty_cycle", O_WRONLY);
++   RARCH_LOG("[udev] DEBUG: PWM duty fd: %d\n", pad->pwm_duty_fd);
++   
++   pad->pwm_enable_fd = open("/sys/class/pwm/pwmchip0/pwm0/enable", O_WRONLY);
++   RARCH_LOG("[udev] DEBUG: PWM enable fd: %d\n", pad->pwm_enable_fd);
++   
++   if (pad->pwm_period_fd >= 0 && pad->pwm_duty_fd >= 0 && pad->pwm_enable_fd >= 0)
++   {
++      RARCH_LOG("[udev] DEBUG: All PWM files opened successfully, initializing PWM\n");
++      
++      /* Initialize PWM: set period to 1ms (1000000 ns) */
++      ssize_t period_result = write(pad->pwm_period_fd, "1000000", 7);
++      RARCH_LOG("[udev] DEBUG: PWM period write result: %zd\n", period_result);
++      
++      /* Start with motor off (100% duty cycle for inverted PWM) */
++      ssize_t duty_result = write(pad->pwm_duty_fd, "1000000", 7);
++      RARCH_LOG("[udev] DEBUG: PWM duty cycle write result: %zd\n", duty_result);
++      
++      /* Enable PWM */
++      ssize_t enable_result = write(pad->pwm_enable_fd, "1", 1);
++      RARCH_LOG("[udev] DEBUG: PWM enable write result: %zd\n", enable_result);
++      
++      /* Test a quick vibration pulse to verify PWM is working */
++      RARCH_LOG("[udev] DEBUG: Testing PWM with brief strong vibration pulse\n");
++      write(pad->pwm_duty_fd, "100000", 6);  /* 10% duty cycle = strong vibration */
++      usleep(200000);  /* 200ms pulse */
++      write(pad->pwm_duty_fd, "1000000", 7); /* Back to off */
++      RARCH_LOG("[udev] DEBUG: PWM test pulse completed\n");
++      
++      pad->pwm_rumble_available = true;
++      pad->pwm_current_strength = 0;
++      
++      RARCH_LOG("[udev] PWM rumble initialized successfully.\n");
++      return true;
++   }
++   else
++   {
++      RARCH_LOG("[udev] DEBUG: PWM initialization failed, closing file descriptors\n");
++      /* Close any successfully opened FDs */
++      if (pad->pwm_period_fd >= 0) { close(pad->pwm_period_fd); pad->pwm_period_fd = -1; }
++      if (pad->pwm_duty_fd >= 0) { close(pad->pwm_duty_fd); pad->pwm_duty_fd = -1; }
++      if (pad->pwm_enable_fd >= 0) { close(pad->pwm_enable_fd); pad->pwm_enable_fd = -1; }
++      
++      pad->pwm_rumble_available = false;
++      return false;
++   }
++}
++
++static void udev_pwm_rumble_cleanup(struct udev_joypad *pad)
++{
++   if (pad->pwm_rumble_available)
++   {
++      /* Turn off rumble before cleanup */
++      if (pad->pwm_duty_fd >= 0)
++         write(pad->pwm_duty_fd, "1000000", 7);
++      
++      /* Close file descriptors */
++      if (pad->pwm_period_fd >= 0) { close(pad->pwm_period_fd); pad->pwm_period_fd = -1; }
++      if (pad->pwm_duty_fd >= 0) { close(pad->pwm_duty_fd); pad->pwm_duty_fd = -1; }
++      if (pad->pwm_enable_fd >= 0) { close(pad->pwm_enable_fd); pad->pwm_enable_fd = -1; }
++      
++      pad->pwm_rumble_available = false;
++   }
++}
++
++static bool udev_pwm_set_rumble(struct udev_joypad *pad, uint16_t strength)
++{
++   char duty_str[16];
++   uint32_t duty_cycle;
++   
++   RARCH_LOG("[udev] DEBUG: PWM rumble requested - strength: %u, gain: %u%%\n", strength, pad->rumble_gain);
++   
++   if (!pad->pwm_rumble_available || pad->pwm_duty_fd < 0)
++   {
++      RARCH_LOG("[udev] DEBUG: PWM rumble not available or fd invalid\n");
++      return false;
++   }
++   
++   /* For inverted PWM with maximum vibration range: 
++    * 0% strength = 100% duty cycle (1000000) = motor off
++    * 100% strength = 0% duty cycle (0) = maximum vibration
++    * Scale strength (0-65535) to duty cycle (1000000-0) */
++   
++   /* Map strength to maximum duty cycle range for strongest vibration */
++   const uint32_t min_duty = 0;       /* 0% duty cycle = maximum vibration */
++   const uint32_t max_duty = 1000000; /* 100% duty cycle = motor off */
++   
++   RARCH_LOG("[udev] DEBUG: min_duty: %u, max_duty: %u\n", min_duty, max_duty);
++   
++   if (strength == 0)
++   {
++      duty_cycle = max_duty; /* Motor off */
++   }
++   else
++   {
++      /* Scale strength to duty cycle range: 1000000 down to 0 */
++      uint32_t range = max_duty - min_duty;  /* Should be 1000000 */
++      
++      /* Use 64-bit math to avoid overflow: (strength * range) / 65535 */
++      uint64_t temp = ((uint64_t)strength * (uint64_t)range) / 65535ULL;
++      uint32_t scaled = (uint32_t)temp;
++      
++      duty_cycle = max_duty - scaled;  /* Should be ~0 for max strength */
++      
++      RARCH_LOG("[udev] DEBUG: Calculation - range: %u, scaled: %u, duty_cycle: %u\n", 
++                range, scaled, duty_cycle);
++      
++      /* Ensure we don't go below minimum vibration duty cycle */
++      if (duty_cycle < min_duty)
++         duty_cycle = min_duty;
++   }
++   
++   /* Apply rumble gain - but only reduce vibration intensity, don't increase duty cycle */
++   if (pad->rumble_gain < 100 && strength > 0)
++   {
++      /* Scale the vibration strength down by the gain, but keep motor-off at 1000000 */
++      uint32_t vibration_amount = max_duty - duty_cycle;  /* How much vibration we have */
++      vibration_amount = vibration_amount * pad->rumble_gain / 100;  /* Scale by gain */
++      duty_cycle = max_duty - vibration_amount;  /* Apply scaled vibration */
++   }
++   
++   RARCH_LOG("[udev] DEBUG: Setting PWM duty cycle to %u (strength %u -> %u%%)\n", 
++             duty_cycle, strength, 100 - (duty_cycle / 10000));
++   
++   snprintf(duty_str, sizeof(duty_str), "%u", duty_cycle);
++   
++   ssize_t write_result = write(pad->pwm_duty_fd, duty_str, strlen(duty_str));
++   if (write_result < 0)
++   {
++      RARCH_ERR("[udev] Failed to set PWM duty cycle: %s\n", strerror(errno));
++      return false;
++   }
++   
++   RARCH_LOG("[udev] DEBUG: Successfully wrote PWM duty cycle: %s (wrote %zd bytes)\n", 
++             duty_str, write_result);
++   
++   pad->pwm_current_strength = strength;
++   return true;
++}
++
+ static bool udev_set_rumble_gain(unsigned i, unsigned gain)
+ {
+    struct input_event ie;
+    struct udev_joypad *pad = (struct udev_joypad*)&udev_pads[i];
+ 
+    /* Does not support > 100 gains */
+-   if ((pad->fd < 0) ||
+-       (gain > 100))
++   if (gain > 100)
+       return false;
+ 
+    if (pad->rumble_gain == gain)
+       return true;
+ 
+-   memset(&ie, 0, sizeof(ie));
+-   ie.type = EV_FF;
+-   ie.code = FF_GAIN;
+-   ie.value = 0xFFFF * (gain/100.0);
++   /* Try force feedback first */
++   if (pad->fd >= 0 && pad->num_effects >= 2)
++   {
++      memset(&ie, 0, sizeof(ie));
++      ie.type = EV_FF;
++      ie.code = FF_GAIN;
++      ie.value = 0xFFFF * (gain/100.0);
+ 
+-   if (write(pad->fd, &ie, sizeof(ie)) < (ssize_t)sizeof(ie))
++      if (write(pad->fd, &ie, sizeof(ie)) >= (ssize_t)sizeof(ie))
++      {
++         pad->rumble_gain = gain;
++         return true;
++      }
++   }
++   
++   /* Fallback to PWM rumble */
++   if (pad->pwm_rumble_available)
+    {
+-      RARCH_ERR("[udev] Failed to set rumble gain on pad #%u.\n", i);
+-      return false;
++      pad->rumble_gain = gain;
++      /* Re-apply current rumble strength with new gain */
++      return udev_pwm_set_rumble(pad, pad->pwm_current_strength);
+    }
+ 
+-   pad->rumble_gain = gain;
+-
+-   return true;
++   RARCH_ERR("[udev] Failed to set rumble gain on pad #%u.\n", i);
++   return false;
+ }
+-#endif
+ 
+ static int udev_add_pad(struct udev_device *dev, unsigned p, int fd, const char *path)
+ {
+    int i;
+    struct stat st;
+@@ -297,20 +462,44 @@
+          RARCH_LOG(
+                "[udev] Pad #%u (%s) supports %d force feedback effects.\n",
+                p, path, pad->num_effects);
+    }
+ 
+-#ifndef HAVE_LAKKA_SWITCH
+    /* Set rumble gain here, if supported */
++   RARCH_LOG("[udev] DEBUG: Checking rumble support for pad #%u, FF_RUMBLE bit: %s\n", 
++             p, test_bit(FF_RUMBLE, ffbit) ? "SET" : "NOT SET");
++   
+    if (test_bit(FF_RUMBLE, ffbit))
+    {
++#ifndef HAVE_LAKKA_SWITCH
++      RARCH_LOG("[udev] DEBUG: Force feedback available, setting up FF rumble\n");
+       settings_t *settings = config_get_ptr();
+       unsigned rumble_gain = settings ? settings->uints.input_rumble_gain
+                                       : DEFAULT_RUMBLE_GAIN;
+       udev_set_rumble_gain(p, rumble_gain);
+-   }
++#else
++      RARCH_LOG("[udev] DEBUG: HAVE_LAKKA_SWITCH defined, skipping FF rumble setup\n");
+ #endif
++   }
++   else
++   {
++      RARCH_LOG("[udev] DEBUG: No force feedback, attempting PWM rumble initialization\n");
++      /* Try to initialize PWM rumble if force feedback is not available */
++      if (udev_pwm_rumble_init(pad))
++      {
++         settings_t *settings = config_get_ptr();
++         unsigned rumble_gain = settings ? settings->uints.input_rumble_gain
++                                         : DEFAULT_RUMBLE_GAIN;
++         /* Set initial PWM rumble gain */
++         pad->rumble_gain = rumble_gain;
++         RARCH_LOG("[udev] Pad #%u (%s) using PWM rumble fallback.\n", p, path);
++      }
++      else
++      {
++         RARCH_LOG("[udev] DEBUG: PWM rumble initialization failed for pad #%u\n", p);
++      }
++   }
+ 
+    return ret;
+ }
+ 
+ static void udev_check_device(struct udev_device *dev, const char *path)
+@@ -347,10 +536,13 @@
+    }
+ }
+ 
+ static void udev_free_pad(unsigned pad)
+ {
++   /* Cleanup PWM rumble if available */
++   udev_pwm_rumble_cleanup(&udev_pads[pad]);
++
+    if (udev_pads[pad].fd >= 0)
+       close(udev_pads[pad].fd);
+ 
+    if (udev_pads[pad].path)
+       free(udev_pads[pad].path);
+@@ -359,10 +551,15 @@
+       udev_pads[pad].ident[0] = '\0';
+ 
+    memset(&udev_pads[pad], 0, sizeof(udev_pads[pad]));
+ 
+    udev_pads[pad].fd    = -1;
++   /* Initialize PWM file descriptors */
++   udev_pads[pad].pwm_period_fd = -1;
++   udev_pads[pad].pwm_duty_fd = -1;
++   udev_pads[pad].pwm_enable_fd = -1;
++   udev_pads[pad].pwm_rumble_available = false;
+ }
+ 
+ static void udev_joypad_remove_device(const char *path)
+ {
+    int i;
+@@ -400,78 +597,110 @@
+       enum retro_rumble_effect effect, uint16_t strength)
+ {
+    uint16_t old_strength;
+    struct udev_joypad *pad = (struct udev_joypad*)&udev_pads[i];
+ 
+-   if (pad->fd < 0)
+-      return false;
+-   if (pad->num_effects < 2)
+-      return false;
+-
+-   old_strength = pad->strength[effect];
+-   if (old_strength != strength)
++   /* Try force feedback first if available */
++   if (pad->fd >= 0 && pad->num_effects >= 2)
+    {
+-      int old_effect = pad->has_set_ff[effect] ? pad->effects[effect] : -1;
+-
+-      if (strength && strength != pad->configured_strength[effect])
++      old_strength = pad->strength[effect];
++      if (old_strength != strength)
+       {
+-         /* Create new or update old playing state. */
+-         struct ff_effect e      = {0};
+-         /* This defines the length of the effect and
+-            the delay before playing it. This means there
+-            is a limit on the maximum vibration time, but
+-            it's hopefully sufficient for most cases. Maybe
+-            there's a better way? */
+-         struct ff_replay replay = {0xffff, 0};
+-
+-         e.type   = FF_RUMBLE;
+-         e.id     = old_effect;
+-         e.replay = replay;
++         int old_effect = pad->has_set_ff[effect] ? pad->effects[effect] : -1;
+ 
+-         switch (effect)
++         if (strength && strength != pad->configured_strength[effect])
+          {
+-            case RETRO_RUMBLE_STRONG:
+-               e.u.rumble.strong_magnitude = strength;
+-               break;
+-            case RETRO_RUMBLE_WEAK:
+-               e.u.rumble.weak_magnitude = strength;
+-               break;
+-            default:
++            /* Create new or update old playing state. */
++            struct ff_effect e      = {0};
++            /* This defines the length of the effect and
++               the delay before playing it. This means there
++               is a limit on the maximum vibration time, but
++               it's hopefully sufficient for most cases. Maybe
++               there's a better way? */
++            struct ff_replay replay = {0xffff, 0};
++
++            e.type   = FF_RUMBLE;
++            e.id     = old_effect;
++            e.replay = replay;
++
++            switch (effect)
++            {
++               case RETRO_RUMBLE_STRONG:
++                  e.u.rumble.strong_magnitude = strength;
++                  break;
++               case RETRO_RUMBLE_WEAK:
++                  e.u.rumble.weak_magnitude = strength;
++                  break;
++               default:
++                  return false;
++            }
++
++            if (ioctl(pad->fd, EVIOCSFF, &e) < 0)
++            {
++               RARCH_ERR("[udev] Failed to set rumble effect on pad #%u.\n", i);
+                return false;
++            }
++
++            pad->effects[effect]             = e.id;
++            pad->has_set_ff[effect]          = true;
++            pad->configured_strength[effect] = strength;
+          }
++         pad->strength[effect] = strength;
+ 
+-         if (ioctl(pad->fd, EVIOCSFF, &e) < 0)
++         /* It seems that we can update strength with EVIOCSFF atomically. */
++         if ((!!strength) != (!!old_strength))
+          {
+-            RARCH_ERR("[udev] Failed to set rumble effect on pad #%u.\n", i);
+-            return false;
+-         }
++            struct input_event play;
+ 
+-         pad->effects[effect]             = e.id;
+-         pad->has_set_ff[effect]          = true;
+-         pad->configured_strength[effect] = strength;
++            play.type  = EV_FF;
++            play.code  = pad->effects[effect];
++            play.value = !!strength;
++
++            if (write(pad->fd, &play, sizeof(play)) < (ssize_t)sizeof(play))
++            {
++               RARCH_ERR("[udev] Failed to play rumble effect #%u on pad #%u.\n",
++                     effect, i);
++               return false;
++            }
++         }
+       }
+-      pad->strength[effect] = strength;
++      return true;
++   }
+ 
+-      /* It seems that we can update strength with EVIOCSFF atomically. */
+-      if ((!!strength) != (!!old_strength))
++   /* Fallback to PWM rumble if force feedback is not available */
++   if (pad->pwm_rumble_available)
++   {
++      uint16_t combined_strength = 0;
++      
++      /* Store the effect strength */
++      pad->strength[effect] = strength;
++      
++      /* For PWM, combine both strong and weak effects into a single motor */
++      switch (effect)
+       {
+-         struct input_event play;
+-
+-         play.type  = EV_FF;
+-         play.code  = pad->effects[effect];
+-         play.value = !!strength;
+-
+-         if (write(pad->fd, &play, sizeof(play)) < (ssize_t)sizeof(play))
+-         {
+-            RARCH_ERR("[udev] Failed to play rumble effect #%u on pad #%u.\n",
+-                  effect, i);
++         case RETRO_RUMBLE_STRONG:
++            /* Strong rumble gets full priority, weak gets reduced impact */
++            combined_strength = strength;
++            if (pad->strength[RETRO_RUMBLE_WEAK] > 0)
++               combined_strength = MAX(combined_strength, pad->strength[RETRO_RUMBLE_WEAK] / 2);
++            break;
++         case RETRO_RUMBLE_WEAK:
++            /* If strong rumble is active, weak has reduced impact */
++            if (pad->strength[RETRO_RUMBLE_STRONG] > 0)
++               combined_strength = MAX(pad->strength[RETRO_RUMBLE_STRONG], strength / 2);
++            else
++               combined_strength = strength;
++            break;
++         default:
+             return false;
+-         }
+       }
++      
++      return udev_pwm_set_rumble(pad, combined_strength);
+    }
+ 
+-   return true;
++   /* No rumble support available */
++   return false;
+ }
+ 
+ static bool udev_joypad_poll_hotplug_available(struct udev_monitor *dev)
+ {
+    struct pollfd fds;

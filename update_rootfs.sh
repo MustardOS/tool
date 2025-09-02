@@ -54,8 +54,8 @@ printf "\t\033[1m- Using Build ID:\033[0m %s\n" "$BUILD_ID"
 rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
-printf "\t\033[1m- Updating muOS Internals\033[0m\n"
-for I in bin browse config default device frontend kiosk script share; do
+printf "\t\033[1m- Updating MustardOS Internals\033[0m\n"
+for I in bin browse config default device frontend kiosk script share update; do
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -75,7 +75,7 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	# Skip over empty lines like the first and last ones. I like to keep things tidy!
 	[ -z "$COMPONENT" ] || [ -z "$SRC" ] || [ -z "$DST" ] && continue
 
-	printf "\t\033[1m- Updating muOS %s\033[0m\n" "$COMPONENT"
+	printf "\t\033[1m- Updating MustardOS %s\033[0m\n" "$COMPONENT"
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -86,20 +86,28 @@ printf "%s" "$UPDATE_TASKS" | while IFS='|' read -r COMPONENT SRC DST; do
 	printf "\n"
 done
 
-printf "\t\033[1m- Updating muOS Defaults\033[0m\n"
+printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
 UPDATE_DEFAULTS="
+emulator/retroarch|$MOUNT_POINT/opt/muos/default/MUOS/emulator/retroarch/
 info/assign|$MOUNT_POINT/opt/muos/default/MUOS/info/assign/
 info/config|$MOUNT_POINT/opt/muos/default/MUOS/info/config/
 info/name|$MOUNT_POINT/opt/muos/default/MUOS/info/name/
-retroarch|$MOUNT_POINT/opt/muos/default/MUOS/retroarch/
 theme|$MOUNT_POINT/opt/muos/default/MUOS/theme/
 "
 
 echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SUBDIR DST; do
 	[ -z "$SUBDIR" ] || [ -z "$DST" ] && continue
 
-	rsync -a --info=progress2 "$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/" "$DST"
+	OG_INIT="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/"
+	if [ -d "$OG_INIT" ]; then
+		rsync -a --info=progress2 "$OG_INIT" "$DST"
+	else
+		OG_SHAR="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/$SUBDIR/"
+		if [ -d "$OG_SHAR" ]; then
+			rsync -a --info=progress2 "$OG_SHAR" "$DST"
+		fi
+	fi
 done
 
 printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
@@ -176,7 +184,7 @@ for IMG in "$DIR"/*.img; do
 	if [ -f "$IMG" ]; then
 		printf "\033[1mProcessing Image:\033[0m %s\n" "$IMG"
 
-		DEVICE=$(echo "$IMG" | sed -n 's/.*muOS-\([^-_]*-[^-_]*\).*\.img/\1/p')
+		DEVICE=$(printf '%s' "$IMG" | sed -n 's#.*MustardOS_\([^_]*\)_.*\.img$#\1#p')
 		if [ -z "$DEVICE" ]; then
 			printf "\t\033[1m- Failed to extract device name from image name\033[0m\n"
 			continue
@@ -228,7 +236,8 @@ for IMG in "$DIR"/*.img; do
 		sudo -v
 
 		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
-		dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
+		pv "$DEVICE.$ROOTFS" | dd of="$IMG" bs=12M seek=13 conv=notrunc,noerror,fsync status=none
+		# dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
 
 		printf "\n\t\033[1m- Removing RootFS:\033[0m '%s'\n" "$DEVICE.$ROOTFS"
 		rm -f "$DEVICE.$ROOTFS"

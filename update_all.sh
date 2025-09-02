@@ -1,6 +1,19 @@
 #!/bin/sh
 
-sudo -v
+sudo -v || {
+	printf "Superuser Authentication Failed\n" >&2
+	exit 1
+}
+
+(
+	while :; do
+		sleep 60
+		sudo -n true || exit
+	done
+) &
+SUDO_KEEPALIVE_PID=$!
+
+trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null; sudo -k' 0 INT TERM
 
 START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 START_EPOCH=$(date +%s)
