@@ -130,11 +130,11 @@ case "$DEVICENAME" in
         cmake .. \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DUSE_SYSTEM_FFMPEG=OFF \
             -DUSING_EGL=ON \
             -DUSING_GLES2=ON \
             -DUSING_FBDEV=ON \
-            -DCMAKE_DISABLE_FIND_PACKAGE_Vulkan=OFF \
-            -DCMAKE_DISABLE_FIND_PACKAGE_X11=ON \
             -DUSING_X11_VULKAN=OFF \
             -DUSING_X11=OFF \
             -DUSE_DISCORD=OFF \
