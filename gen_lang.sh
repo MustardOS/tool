@@ -14,7 +14,7 @@ REPO_INTERNAL="internal"
 REPO_FRONTEND="frontend"
 
 LANGUAGE_FILE="$HOME/$REPO_ROOT/$REPO_FRONTEND/common/language.c"
-RESULT_JSON="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/language/English.json"
+RESULT_JSON="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/language/English.json"
 TRANSLATIONS_FILE="$(mktemp)"
 
 echo '{}' >"$TRANSLATIONS_FILE"
@@ -39,13 +39,16 @@ PROCESS_LANGUAGE_FILE() {
 
 ADD_MUXAPP_SCRIPTS() {
 	APP_DIRECTORY="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/application"
-	printf "Processing Application Scripts: %s\n" "$APP_DIRECTORY"
+	printf "Processing Applications: %s\n" "$APP_DIRECTORY"
 
-	find "$APP_DIRECTORY" -type f -name "*.sh" | while read -r SCRIPT_PATH; do
-		SCRIPT_NAME=$(basename "$SCRIPT_PATH" .sh)
-		printf "\tAdding '%s' to 'muxapp'\n" "$SCRIPT_NAME"
+	find "$APP_DIRECTORY" -maxdepth 1 -type d | while read -r APP_DIR; do
+		APP_DIR=$(basename "$APP_DIR")
 
-		jq --arg KEY "$SCRIPT_NAME" --arg VAL "$SCRIPT_NAME" \
+		[ "$APP_DIR" = "application" ] && continue
+
+		printf "\tAdding '%s' to 'muxapp'\n" "$APP_DIR"
+
+		jq --arg KEY "$APP_DIR" --arg VAL "$APP_DIR" \
 			'.muxapp[$KEY] = $VAL' "$TRANSLATIONS_FILE" >"$TRANSLATIONS_FILE.tmp" &&
 			mv "$TRANSLATIONS_FILE.tmp" "$TRANSLATIONS_FILE"
 	done
