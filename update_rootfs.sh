@@ -89,20 +89,22 @@ done
 printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
 INFO_SHARE="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/info"
-UPDATE_DEFAULTS="
-config|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/ra.config.zip
-name|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/muos.name.zip
-theme|$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS|$MOUNT_POINT/opt/muos/share/archive/muos.theme.zip
+ARCHIVES="
+Init User Data|init|$HOME/$REPO_ROOT/$REPO_INTERNAL|$MOUNT_POINT/opt/muos/share/archive/muos.init.zip
+RetroArch Configurations|config|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/ra.config.zip
+Name Configurations|name|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/muos.name.zip
+MustardOS Theme|active|$INFO_SHARE/../theme|$MOUNT_POINT/opt/muos/share/theme/MustardOS.muxthm
 "
 
-echo "$UPDATE_DEFAULTS" | while IFS='|' read -r DEF_TYPE DEF_DIR DEF_ZIP; do
+echo "$ARCHIVES" | while IFS='|' read -r DEF_NAME DEF_TYPE DEF_DIR DEF_ZIP; do
+	[ -z "$DEF_NAME" ] && continue
 	[ -z "$DEF_TYPE" ] && continue
 	[ -z "$DEF_DIR" ] && continue
 	[ -z "$DEF_ZIP" ] && continue
 
 	SRC="$DEF_DIR/$DEF_TYPE"
 	[ -d "$SRC" ] || {
-		printf "\t  Skipping '%s': %s not found...\n" "$DEF_TYPE" "$SRC"
+		printf "\t  Skipping '%s': %s not found...\n" "$DEF_NAME" "$SRC"
 		continue
 	}
 
@@ -111,59 +113,11 @@ echo "$UPDATE_DEFAULTS" | while IFS='|' read -r DEF_TYPE DEF_DIR DEF_ZIP; do
 		continue
 	}
 
-	printf "\t  Creating archive of '%s'\n" "$DEF_TYPE"
-	(cd "$DEF_DIR" && rm -f "$DEF_ZIP" && zip -r -q "$DEF_ZIP" "$DEF_TYPE") || {
+	printf "\t  Creating Archive of %s...\n" "$DEF_NAME"
+	(cd "$DEF_DIR" && rm -f "$DEF_ZIP" && zip -q -r0 "$DEF_ZIP" "$DEF_TYPE") || {
 		printf "\t\tFailed to create %s to %s\n" "$SRC" "$DEF_ZIP"
 	}
 done
-
-printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
-INIT_SRC="$HOME/$REPO_ROOT/$REPO_INTERNAL/init"
-UD_OUTPUT="$MOUNT_POINT/opt/muos/init/userdata.tar.gz"
-
-mkdir -p "$MOUNT_POINT/opt/muos/init"
-
-TOTAL_FILES=$(find "$INIT_SRC" -type f | wc -l)
-[ "$TOTAL_FILES" -eq 0 ] && TOTAL_FILES=1
-
-BAR_WIDTH=40
-COUNT=0
-
-tar -C "$INIT_SRC" -cf - . | gzip -9 >"$UD_OUTPUT" &
-TAR_PID=$!
-
-tar -C "$INIT_SRC" -cf - . | tar -tvf - | while read -r _; do
-	COUNT=$((COUNT + 1))
-	PERCENT=$((COUNT * 100 / TOTAL_FILES))
-	FILLED=$((PERCENT * BAR_WIDTH / 100))
-	EMPTY=$((BAR_WIDTH - FILLED))
-
-	BAR=""
-
-	i=0
-	while [ "$i" -lt "$FILLED" ]; do
-		BAR="${BAR}#"
-		i=$((i + 1))
-	done
-
-	i=0
-	while [ "$i" -lt "$EMPTY" ]; do
-		BAR="${BAR} "
-		i=$((i + 1))
-	done
-
-	if [ $PERCENT -gt 100 ]; then
-		printf "\r\t  [%s] 100%% - Finalising" "$BAR"
-	else
-		printf "\r\t  [%s] %3d%%" "$BAR" "$PERCENT"
-	fi
-done
-
-wait "$TAR_PID"
-
-UD_SIZE=$(wc -c <"$UD_OUTPUT")
-UD_MB=$(awk "BEGIN { printf \"%.2f\", $UD_SIZE / 1000000 }")
-printf "\n\t  Compressed to %sMB\n" "$UD_MB"
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 find "$MOUNT_POINT/opt/muos/." -name ".gitkeep" -delete
