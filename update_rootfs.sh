@@ -55,7 +55,7 @@ rm -rf "$MOUNT_POINT/opt/muos"
 mkdir -p "$MOUNT_POINT/opt/muos"
 
 printf "\t\033[1m- Updating MustardOS Internals\033[0m\n"
-for I in bin browse config default device frontend kiosk script share update; do
+for I in bin browse config device frontend kiosk script share update; do
 	rsync -a --info=progress2 \
 		--exclude='.git/' \
 		--exclude='.gitmodules' \
@@ -88,26 +88,33 @@ done
 
 printf "\t\033[1m- Updating MustardOS Defaults\033[0m\n"
 
+INFO_SHARE="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/info"
 UPDATE_DEFAULTS="
-emulator/retroarch|$MOUNT_POINT/opt/muos/default/MUOS/emulator/retroarch/
-info/assign|$MOUNT_POINT/opt/muos/default/MUOS/info/assign/
-info/config|$MOUNT_POINT/opt/muos/default/MUOS/info/config/
-info/name|$MOUNT_POINT/opt/muos/default/MUOS/info/name/
-theme|$MOUNT_POINT/opt/muos/default/MUOS/theme/
+config|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/ra.config.zip
+name|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/muos.name.zip
+theme|$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS|$MOUNT_POINT/opt/muos/share/archive/muos.theme.zip
 "
 
-echo "$UPDATE_DEFAULTS" | while IFS='|' read -r SUBDIR DST; do
-	[ -z "$SUBDIR" ] || [ -z "$DST" ] && continue
+echo "$UPDATE_DEFAULTS" | while IFS='|' read -r DEF_TYPE DEF_DIR DEF_ZIP; do
+	[ -z "$DEF_TYPE" ] && continue
+	[ -z "$DEF_DIR" ] && continue
+	[ -z "$DEF_ZIP" ] && continue
 
-	OG_INIT="$HOME/$REPO_ROOT/$REPO_INTERNAL/init/MUOS/$SUBDIR/"
-	if [ -d "$OG_INIT" ]; then
-		rsync -a --info=progress2 "$OG_INIT" "$DST"
-	else
-		OG_SHAR="$HOME/$REPO_ROOT/$REPO_INTERNAL/share/$SUBDIR/"
-		if [ -d "$OG_SHAR" ]; then
-			rsync -a --info=progress2 "$OG_SHAR" "$DST"
-		fi
-	fi
+	SRC="$DEF_DIR/$DEF_TYPE"
+	[ -d "$SRC" ] || {
+		printf "\t  Skipping '%s': %s not found...\n" "$DEF_TYPE" "$SRC"
+		continue
+	}
+
+	mkdir -p "$(dirname "$DEF_ZIP")" || {
+		printf "\t  Failed to create %s...\n" "$(dirname "$DEF_ZIP")"
+		continue
+	}
+
+	printf "\t  Creating archive of '%s'\n" "$DEF_TYPE"
+	(cd "$DEF_DIR" && rm -f "$DEF_ZIP" && zip -r -q "$DEF_ZIP" "$DEF_TYPE") || {
+		printf "\t\tFailed to create %s to %s\n" "$SRC" "$DEF_ZIP"
+	}
 done
 
 printf "\n\t\033[1m- Compressing Init User Data\033[0m\n"
