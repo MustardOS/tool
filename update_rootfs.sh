@@ -93,7 +93,7 @@ ARCHIVES="
 Init User Data|init|$HOME/$REPO_ROOT/$REPO_INTERNAL|$MOUNT_POINT/opt/muos/share/archive/muos.init.zip
 RetroArch Configurations|config|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/ra.config.zip
 Name Configurations|name|$INFO_SHARE|$MOUNT_POINT/opt/muos/share/archive/muos.name.zip
-MustardOS Theme|active|$INFO_SHARE/../theme|$MOUNT_POINT/opt/muos/share/theme/MustardOS.muxthm
+MustardOS Theme|.|$INFO_SHARE/../theme/active|$MOUNT_POINT/opt/muos/share/theme/MustardOS.muxthm
 "
 
 echo "$ARCHIVES" | while IFS='|' read -r DEF_NAME DEF_TYPE DEF_DIR DEF_ZIP; do
