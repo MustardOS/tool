@@ -1,22 +1,51 @@
 #!/bin/sh
 
+# Usage:
+#   ./update_rootfs.sh <disk image> <rootfs image> [rootfs partition]
+# Example:
+#   ./update_rootfs.sh G350 G350-ROOTFS.img 2
+# Defaults:
+#   ROOTFS_PARTNUM=5
+
 REPO_ROOT="${REPO_ROOT:-Repo/MustardOS}"
 REPO_FRONTEND="${REPO_FRONTEND:-frontend}"
 REPO_INTERNAL="${REPO_INTERNAL:-internal}"
 
-if [ "$#" -ne 2 ]; then
-	printf "Usage: %s <image_dir> <rootfs_image>\n" "$0"
+ROOTFS_PARTNUM="${3:-5}"
+
+REQUIRE_CMDS() {
+	for CMD in "$@"; do
+		if ! command -v "$CMD" >/dev/null 2>&1; then
+			printf "Error: Missing required command '%s'\n" "$CMD" >&2
+			exit 1
+		fi
+	done
+}
+
+GET_OFFSET_BYTES() {
+	IMG="$1"
+	PART="$2"
+
+	START_BYTES="$(
+		parted -sm "$IMG" unit B print 2>/dev/null |
+			awk -F: -v P="$PART" '$1==P{gsub(/B/,"",$2); print $2}'
+	)"
+	if printf '%s' "$START_BYTES" | grep -Eq '^[0-9]+$'; then
+		printf '%s' "$START_BYTES"
+		return 0
+	fi
+
+	return 1
+}
+
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+	printf "Usage: %s <image_dir> <rootfs_image> [partition_number]\n" "$0"
 	exit 1
 fi
 
-for CMD in dd rsync; do
-	if ! command -v "$CMD" >/dev/null 2>&1; then
-		printf "Error: Missing required command '%s'\n" "$CMD" >&2
-		exit 1
-	fi
-done
+REQUIRE_CMDS dd rsync pv zip mount umount
 
-DIR=$1
+DIR="$1"
 if [ ! -d "$DIR" ]; then
 	printf "No valid image directory found at '%s'\n" "$DIR"
 	exit 1
@@ -142,70 +171,78 @@ sudo -v
 printf "\n===============\033[1m Image Processing \033[0m===============\n\n"
 
 for IMG in "$DIR"/*.img; do
-	if [ -f "$IMG" ]; then
-		printf "\033[1mProcessing Image:\033[0m %s\n" "$IMG"
+	[ -f "$IMG" ] || continue
 
-		DEVICE=$(printf '%s' "$IMG" | sed -n 's#.*MustardOS_\([^_]*\)_.*\.img$#\1#p')
-		if [ -z "$DEVICE" ]; then
-			printf "\t\033[1m- Failed to extract device name from image name\033[0m\n"
-			continue
-		else
-			printf "\t\033[1m- Detected Device Type:\033[0m %s\n" "$DEVICE"
-		fi
+	printf "\033[1mProcessing Image:\033[0m %s\n" "$IMG"
 
-		printf "\t\033[1m- Copying RootFS:\033[0m '%s' to '%s'\n" "$ROOTFS" "$DEVICE.$ROOTFS"
-		cp "$ROOTFS" "$DEVICE.$ROOTFS" && sync
-
-		MOUNT_POINT=$(mktemp -d)
-		if ! sudo mount -o loop,rw "$DEVICE.$ROOTFS" "$MOUNT_POINT"; then
-			printf "\t\033[1m- Failed to mount RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
-			rmdir "$MOUNT_POINT"
-			continue
-		else
-			printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
-		fi
-
-		printf "\t\033[1m- Removing Other Devices\033[0m\n"
-		DEVICE_LOWER=$(printf "%s" "$DEVICE" | tr '[:upper:]' '[:lower:]')
-
-		for DEV_DIR in "$MOUNT_POINT/opt/muos/device/"*/; do
-			NAME=$(basename "$DEV_DIR")
-			[ "$NAME" != "$DEVICE_LOWER" ] && rm -rf "$DEV_DIR"
-		done
-
-		mv "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"/* "$MOUNT_POINT/opt/muos/device/"
-		rm -rf "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"
-
-		printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/device/config/board/name")"
-
-		printf "\t\033[1m- Updating Build Identification\033[0m\n"
-		printf "%s" "$BUILD_ID" >"$MOUNT_POINT/opt/muos/config/system/build"
-		echo "$BUILD_ID" >"$DIR/buildID.txt"
-		printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$BUILD_ID"
-
-		printf "\t\033[1m- Correcting File Permissions\033[0m\n"
-		sudo chmod -R 755 "$MOUNT_POINT/opt/muos"
-		sudo chown -R "$(whoami):$(whoami)" "$MOUNT_POINT/opt/muos"
-
-		printf "\t\033[1m- File Synchronisation\033[0m\n"
-		sync
-
-		printf "\t\033[1m- Unmounting Image\033[0m\n"
-		sudo umount "$MOUNT_POINT"
-		rmdir "$MOUNT_POINT"
-
-		sudo -v
-
-		printf "\t\033[1m- Injecting modified RootFS\033[0m\n"
-		pv "$DEVICE.$ROOTFS" | dd of="$IMG" bs=12M seek=13 conv=notrunc,noerror,fsync status=none
-		# dd if="$DEVICE.$ROOTFS" of="$IMG" bs=4M seek=39 conv=notrunc,noerror status=progress
-
-		printf "\n\t\033[1m- Removing RootFS:\033[0m '%s'\n" "$DEVICE.$ROOTFS"
-		rm -f "$DEVICE.$ROOTFS"
-
-		printf "\t\033[1m- All Done!\033[0m\n\n"
-		sudo -v
+	DEVICE=$(printf '%s' "$IMG" | sed -n 's#.*MustardOS_\([^_]*\)_.*\.img$#\1#p')
+	if [ -z "$DEVICE" ]; then
+		printf "\t\033[1m- Failed to extract device name from image name\033[0m\n"
+		continue
+	else
+		printf "\t\033[1m- Detected Device Type:\033[0m %s\n" "$DEVICE"
 	fi
+
+	printf "\t\033[1m- Copying RootFS:\033[0m '%s' to '%s'\n" "$ROOTFS" "$DEVICE.$ROOTFS"
+	cp "$ROOTFS" "$DEVICE.$ROOTFS" && sync
+
+	MOUNT_POINT=$(mktemp -d)
+	if ! sudo mount -o loop,rw "$DEVICE.$ROOTFS" "$MOUNT_POINT"; then
+		printf "\t\033[1m- Failed to mount RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
+		rmdir "$MOUNT_POINT"
+		continue
+	else
+		printf "\t\033[1m- Mounted RootFS:\033[0m '%s' at '%s'\n" "$DEVICE.$ROOTFS" "$MOUNT_POINT"
+	fi
+
+	printf "\t\033[1m- Removing Other Devices\033[0m\n"
+	DEVICE_LOWER=$(printf "%s" "$DEVICE" | tr '[:upper:]' '[:lower:]')
+
+	for DEV_DIR in "$MOUNT_POINT/opt/muos/device/"*/; do
+		NAME=$(basename "$DEV_DIR")
+		[ "$NAME" != "$DEVICE_LOWER" ] && rm -rf "$DEV_DIR"
+	done
+
+	mv "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"/* "$MOUNT_POINT/opt/muos/device/"
+	rm -rf "$MOUNT_POINT/opt/muos/device/$DEVICE_LOWER"
+
+	printf "\t\033[1m- Confirmed Device Type:\033[0m %s\n" "$(cat "$MOUNT_POINT/opt/muos/device/config/board/name")"
+
+	printf "\t\033[1m- Updating Build Identification\033[0m\n"
+	printf "%s" "$BUILD_ID" >"$MOUNT_POINT/opt/muos/config/system/build"
+	echo "$BUILD_ID" >"$DIR/buildID.txt"
+	printf "\t\033[1m- Confirmed Build Identification:\033[0m %s\n" "$BUILD_ID"
+
+	printf "\t\033[1m- Correcting File Permissions\033[0m\n"
+	sudo chmod -R 755 "$MOUNT_POINT/opt/muos"
+	sudo chown -R "$(whoami):$(whoami)" "$MOUNT_POINT/opt/muos"
+
+	printf "\t\033[1m- File Synchronisation\033[0m\n"
+	sync
+
+	printf "\t\033[1m- Unmounting Image\033[0m\n"
+	sudo umount "$MOUNT_POINT"
+	rmdir "$MOUNT_POINT"
+
+	sudo -v
+
+	OFFSET_BYTES="$(GET_OFFSET_BYTES "$IMG" "$ROOTFS_PARTNUM")"
+
+	if [ -z "$OFFSET_BYTES" ]; then
+		printf "\t\033[1m- ERROR:\033[0m Could not determine offset for partition %s in %s\n" "$ROOTFS_PARTNUM" "$IMG" >&2
+		printf "\n\t\033[1m- Removing RootFS:\033[0m \"%s\"\n" "$DEVICE.$ROOTFS"
+		rm -f "$DEVICE.$ROOTFS"
+		continue
+	fi
+
+	printf "\t\033[1m- Injecting modified RootFS\033[0m (part=%s, offset=%s bytes)\n" "$ROOTFS_PARTNUM" "$OFFSET_BYTES"
+	pv "$DEVICE.$ROOTFS" | sudo dd of="$IMG" bs=12M oflag=seek_bytes seek="$OFFSET_BYTES" conv=notrunc,noerror,fsync status=none
+
+	printf "\n\t\033[1m- Removing RootFS:\033[0m \"%s\"\n" "$DEVICE.$ROOTFS"
+	rm -f "$DEVICE.$ROOTFS"
+
+	printf "\t\033[1m- All Done!\033[0m\n\n"
+	sudo -v
 done
 
 printf "==========\033[1m Image Processing Complete \033[0m===========\n\n"
