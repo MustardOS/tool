@@ -38,8 +38,8 @@ git clone "$REPO_URL" "$REPO_DIR"
 echo "[2/8] Loading toolchain environment..."
 . "$TOOLCHAIN_SCRIPT"
 
-if [[ "$DEVICE" == "a133p" ]]; then
-  : "${CPU_TUNE:=cortex-a55}"
+if [[ "$DEVICE" == "rk3326" ]]; then
+  : "${CPU_TUNE:=cortex-a35}"
 else
   : "${CPU_TUNE:=cortex-a53}"
 fi
