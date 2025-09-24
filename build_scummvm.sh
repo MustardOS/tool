@@ -4,7 +4,7 @@
 
 # ==== About ====
 # ScummVM build script for MustardOS
-# Created specifically for MustardOS 2508.0 Goose
+# Created specifically for muOS 2508.0 Goose
 # This assumes you have a Cross Compile environment setup with appropriate toolchains.
 
 # Stop if any command fails
@@ -34,61 +34,100 @@ case "$DEVICE" in
         ;;
 esac
 
-echo "Using toolchain script: $TOOLCHAIN_SCRIPT"
-
 # ===== Settings =====
 REPO_URL="https://github.com/scummvm/scummvm.git"
+REPO_DIR="scummvm"
 BRANCH="branch-2-9-1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT_DIR="$SCRIPT_DIR/scummvm/output"
 
-# ===== Start =====
-echo "[1/7] Cloning ScummVM Repository..."
-rm -rf scummvm
-if [ -z "$BRANCH" ]; then
-    # Clone and Build master
-    echo "No Branch specified - Cloning Master"
-    git clone "$REPO_URL"
-else
-    # Clone and Build specific branch
-    echo "Branch specified - Cloning $BRANCH"
-    git clone -b "$BRANCH" --single-branch "$REPO_URL"
-fi
+# ===== Init Toolchain =====
+echo "[Step 01] Loading toolchain environment..."
+echo ""
+sleep 1
 
-cd scummvm
-
-echo "[2/7] Loading toolchain environment..."
+echo "Using toolchain script: $TOOLCHAIN_SCRIPT"
 . "$TOOLCHAIN_SCRIPT"
 
-echo "[3/7] Configuring ScummVM..."
+# ===== Prerequisites =====
+echo "[Step 02] Checking Prerequisites."
+echo ""
+sleep 1
+
+# We need to explicitly point at Freetype2
+export CFLAGS="$CFLAGS -I$SYSROOT/usr/include/freetype2"
+export CXXFLAGS="$CXXFLAGS -I$SYSROOT/usr/include/freetype2"
+export LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib"
+
+# ===== Start =====
+echo "[Step 03] Cloning ScummVM Repository..."
+echo ""
+sleep 1
+
+if [ -d "$REPO_DIR/.git" ]; then
+    echo "Repo already exists. Updating..."
+    cd "$REPO_DIR"
+
+    # Default branch to master if not set
+    : "${BRANCH:=master}"
+
+    git fetch --all
+    git checkout "$BRANCH"
+    git pull --rebase origin "$BRANCH"
+
+    make clean || true
+else
+
+    echo "Cloning fresh repository..."
+    git clone --progress --quiet --recurse-submodules -j"$(nproc)" -b "$BRANCH" "$REPO_URL" "$REPO_DIR"
+    cd "$REPO_DIR"
+fi
+
+echo "[Step 04] Configuring ScummVM..."
+echo ""
+sleep 1
+
 ./configure \
   --host=arm-linux \
   --disable-debug \
   --enable-release \
   --disable-taskbar \
-  --disable-cloud \
   --enable-vkeybd \
   --enable-text-console \
+  --enable-ext-neon \
+  --enable-dlc \
+  --enable-scummvmdlc \
+  --enable-freetype2 \
   --opengl-mode=gles2 \
-  --with-sdl-prefix="$SYSROOT/usr/bin"
+  --with-sdl-prefix="$SYSROOT/usr/bin" \
+  --with-freetype2-prefix="$SYSROOT/usr/bin" \
+  --with-libcurl-prefix="$SYSROOT/usr"
 
-echo "[4/7] Building ScummVM..."
+echo "[Step 05] Building ScummVM..."
+echo ""
+sleep 1
+
 make -j"$(nproc)"
 
-echo "[5/7] Stripping ScummVM binary..."
-$STRIP "scummvm"
+echo "[Step 06] Preparing Binary for muOS."
+echo ""
+sleep 1
 
-echo "[6/7] Calculate MD5 and rename for MustardOS"
+$STRIP "scummvm"
 mv "scummvm" "$SVM_BIN"
 md5sum "$SVM_BIN" | cut -d ' ' -f 1 > "$SVM_BIN.md5"
 
-echo "[7/7] Bundling all required files..."
+tar -czf "${SVM_BIN}.tar.gz" "$SVM_BIN"
+
+echo "[Step 07] Bundling all required files..."
+echo ""
+sleep 1
 
 # Copy Binary and Hash
 mkdir -p "$OUT_DIR"
 echo "Copying Binary and Hash"
-cp -f "$SCRIPT_DIR/scummvm/$SVM_BIN" "$OUT_DIR/$SVM_BIN"
-cp -f "$SCRIPT_DIR/scummvm/$SVM_BIN.md5" "$OUT_DIR/$SVM_BIN.md5"
+cp -f "$SCRIPT_DIR/scummvm/${SVM_BIN}.tar.gz" "$OUT_DIR/${SVM_BIN}.tar.gz"
+cp -f "$SCRIPT_DIR/scummvm/${SVM_BIN}.md5" "$OUT_DIR/${SVM_BIN}.md5"
 
 # Copy Licenses
 mkdir -p "$OUT_DIR/doc"
@@ -99,11 +138,18 @@ cp -f "$SCRIPT_DIR/scummvm/LICENSES/"* "$OUT_DIR/doc/"
 mkdir -p "$OUT_DIR/Theme"
 echo "Copying Themes"
 cp -f "$SCRIPT_DIR/scummvm/gui/themes/"*.dat "$SCRIPT_DIR/scummvm/gui/themes/"*.zip "$OUT_DIR/Theme/"
+cp -f "$SCRIPT_DIR/scummvm/dists/networking/wwwroot.zip" "$OUT_DIR/Theme/"
 
 # Copy Extra
 mkdir -p "$OUT_DIR/Extra"
 echo "Copying Extra"
 cp -f -r "$SCRIPT_DIR/scummvm/dists/engine-data/"* "$OUT_DIR/Extra/"
+cp -f "$SCRIPT_DIR/scummvm/backends/vkeybd/packs/vkeybd_default.zip" "$OUT_DIR/Extra"
+
+# ===== Cleanup =====
+rm -f "$SCRIPT_DIR/scummvm/$SVM_BIN"
+rm -f "$SCRIPT_DIR/scummvm/${SVM_BIN}.md5"
+rm -f "$SCRIPT_DIR/scummvm/${SVM_BIN}.tar.gz"
 
 # ===== Finish =====
 echo "✅ Build complete."
