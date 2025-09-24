@@ -4,7 +4,7 @@
 
 # ==== About ====
 # ScummVM build script for MustardOS
-# Created specifically for muOS 2508.0 Goose
+# Created specifically for MustardOS 2508.0 Goose
 # This assumes you have a Cross Compile environment setup with appropriate toolchains.
 
 # Stop if any command fails
