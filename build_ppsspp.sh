@@ -43,13 +43,23 @@ echo "Using toolchain: $TOOLCHAIN_CMAKE"
 REPO_URL="https://github.com/hrydgard/ppsspp.git"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OUT_DIR="$SCRIPT_DIR/ppsspp/output/"
 
 PATCH_DIR="$SCRIPT_DIR/ppsspp-patches"
 
 . "$TOOLCHAIN_SCRIPT"
 
+# ===== Commit Information =====
+# Master - leave blank
+# 1.19.3 - e49c0bd
+# 1.18.1 - 0f50225
+# 1.17.1 - d479b74
+
+COMMIT=""
+
 # ===== Prerequisites ======
 # Build Freetype
+# We currently don't check toolchain to see if this step is needed.
 
 rm -rf freetype
 git clone https://gitlab.freedesktop.org/freetype/freetype.git
@@ -65,7 +75,9 @@ make install
 
 cd "$SCRIPT_DIR"
 
-# Build SDL2_ttf
+# Build SDL2_ttf 2.20.2
+# We currently don't check toolchain to see if this step is needed.
+
 rm -rf SDL2_ttf
 git clone -b release-2.20.2 https://github.com/libsdl-org/SDL_ttf.git SDL2_ttf
 cd SDL2_ttf
@@ -82,13 +94,29 @@ make install
 
 cd "$SCRIPT_DIR"
 
-# ===== Start =====
-echo "[1/6] Cloning PPSSPP..."
-rm -rf ppsspp
-git clone --recursive "$REPO_URL"
-cd ppsspp
+# ===== Start PPSSPP Build Process =====
+# ===== 01 Clone PPSSPP =====
 
-echo "[2/6] Applying patch(es)..."
+echo "[Step 01] Cloning PPSSPP..."
+rm -rf ppsspp
+if [ -z "$COMMIT" ]; then
+    # Clone and Build master
+    echo "No commit specified - Cloning Master"
+    git clone --recursive "$REPO_URL"
+    cd ppsspp
+else
+    # Clone and Build specific branch
+    # This step may require additional work depending on which commit is building.
+    echo "Commit specified - Cloning $COMMIT"
+    git clone --recursive "$REPO_URL"
+    cd ppsspp
+    git checkout "$COMMIT"
+    git submodule update --init --recursive
+fi
+
+# ===== 02 Apply PPSSPP patches =====
+
+echo "[Step 02] Applying patch(es)..."
 # Check if patch directory exists
 if [ -d "$PATCH_DIR" ]; then
     # Loop over all patch files
@@ -103,11 +131,12 @@ else
     echo "Patch directory not found: $PATCH_DIR"
 fi
 
-echo "[3/6] Setting cmake options..."
+# ===== 03 Setup CMAKE =====
+
+echo "[Step 03] Setting cmake options..."
 mkdir build && cd build
 
-# Probably need to tweak device specific build options
-# Please help with this part.
+# Further work may be required to optimise different device build options
 case "$DEVICENAME" in
     h700)
         cmake .. \
@@ -128,18 +157,24 @@ case "$DEVICENAME" in
         ;;
     a133p)
         cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
-            -DUSE_SYSTEM_FFMPEG=OFF \
-            -DUSING_EGL=ON \
+            -DARM=ON \
+            -DARM64=ON \
             -DUSING_GLES2=ON \
+            -DUSING_EGL=ON \
             -DUSING_FBDEV=ON \
+            -DVULKAN=OFF \
+            -DARM_NO_VULKAN=ON \
             -DUSING_X11_VULKAN=OFF \
-            -DUSING_X11=OFF \
+            -DUSE_WAYLAND_WSI=OFF \
+            -DUSE_FFMPEG=ON \
+            -DUSE_SYSTEM_FFMPEG=OFF \
             -DUSE_DISCORD=OFF \
-            -DCMAKE_C_FLAGS_RELEASE="-O3 -mcpu=cortex-a53 -mtune=cortex-a53" \
-            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -mcpu=cortex-a53 -mtune=cortex-a53" \
+            -DANDROID=OFF -DWIN32=OFF -DAPPLE=OFF \
+            -DUNITTEST=OFF -DSIMULATOR=OFF \
+            -DMOBILE_DEVICE=OFF -DENABLE_CTEST=OFF \
+            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_CMAKE" \
             -DCMAKE_PREFIX_PATH="$SYSROOT/usr" \
             -Wno-dev
         ;;
@@ -155,8 +190,8 @@ case "$DEVICENAME" in
             -DUSING_X11_VULKAN=OFF \
             -DUSING_X11=OFF \
             -DUSE_DISCORD=OFF \
-            -DCMAKE_C_FLAGS_RELEASE="-O3 -mcpu=cortex-a53 -mtune=cortex-a53" \
-            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -mcpu=cortex-a53 -mtune=cortex-a53" \
+            -DCMAKE_C_FLAGS_RELEASE="-O3 -mcpu=cortex-a35 -mtune=cortex-a35 -fomit-frame-pointer -fstrict-aliasing" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -mcpu=cortex-a35 -mtune=cortex-a35 -fomit-frame-pointer -fstrict-aliasing" \
             -DCMAKE_PREFIX_PATH="$SYSROOT/usr" \
             -Wno-dev
         ;;
@@ -165,16 +200,36 @@ case "$DEVICENAME" in
     ;;
 esac
 
+# ===== 04 Make PPSSPP =====
 
-echo "[4/6] Building PPSSPP..."
+echo "[Step 04] Building PPSSPP..."
 make -j"$(nproc)"
 
-echo "[5/6] Stripping Binary..."
+# ===== 05 Cleanup the binary =====
+
+echo "[Step 05] Prepare the resultant binary"
+
+# Strip binary
 $STRIP PPSSPPSDL
 
-echo "[6/6] Calculate MD5 and rename for muOS"
+# Calculate MD5 and rename
 mv "PPSSPPSDL" "$PPSSPP_BIN"
 md5sum "$PPSSPP_BIN" | cut -d ' ' -f 1 > "$PPSSPP_BIN.md5"
 
+# Compress binary for use in muOS
+cd "$SCRIPT_DIR"
+tar -czf "$SCRIPT_DIR/ppsspp/build/${PPSSPP_BIN}.tar.gz" -C ppsspp/build "$PPSSPP_BIN"
+rm "$SCRIPT_DIR/ppsspp/build/$PPSSPP_BIN"
+
+# ===== 06 Package PPSSPP =====
+
+echo "[Step 06] Package PPSSPP files for use in muOS"
+
+mkdir -p "$OUT_DIR"
+rsync -a --exclude=debugger ppsspp/assets/ "$OUT_DIR"
+cp -f $SCRIPT_DIR/ppsspp/build/${PPSSPP_BIN}.* "$OUT_DIR"
+
+# ===== Finish =====
+
 echo "✅ Build complete."
-echo "$PPSSPP_BIN and $PPSSPP_BIN.md5 have been created in $SCRIPT_DIR/ppsspp/build."
+echo "All files have been placed in $OUT_DIR"
