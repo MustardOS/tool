@@ -82,6 +82,8 @@ $STRIP "mupen64plus-input-sdl/projects/unix/mupen64plus-input-sdl.so" || true
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
+mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs"
+mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins"
 cp -v "mupen64plus-input-sdl/projects/unix/mupen64plus-input-sdl.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
 cp -v "mupen64plus-input-sdl/data/InputAutoCfg.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
 

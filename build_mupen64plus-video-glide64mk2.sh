@@ -85,6 +85,8 @@ $STRIP "mupen64plus-video-glide64mk2/projects/unix/mupen64plus-video-glide64mk2.
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
+mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs"
+mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins"
 cp -v "mupen64plus-video-glide64mk2/projects/unix/mupen64plus-video-glide64mk2.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
 cp -v "mupen64plus-video-glide64mk2/data/Glide64mk2.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
 
