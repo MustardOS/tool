@@ -82,6 +82,6 @@ $STRIP "mupen64plus-rsp-hle/projects/unix/mupen64plus-rsp-hle.so" || true
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
-cp -v "mupen64plus-rsp-hle/projects/unix/mupen64plus-rsp-hle.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -v "mupen64plus-rsp-hle/projects/unix/mupen64plus-rsp-hle.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
 
 echo "[8/8] Build complete."

@@ -89,6 +89,8 @@ $STRIP "$REPO_DIR/projects/cmake/plugin/Release/mupen64plus-video-GLideN64.so" |
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
-cp -v "$REPO_DIR/projects/cmake/plugin/Release/mupen64plus-video-GLideN64.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -v "$REPO_DIR/projects/cmake/plugin/Release/mupen64plus-video-GLideN64.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
+cp -v "$REPO_DIR/ini/GLideN64.custom.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
+cp -v "$REPO_DIR/ini/GLideN64.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
 
 echo "[8/8] Build complete."

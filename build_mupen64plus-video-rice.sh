@@ -82,6 +82,7 @@ $STRIP "mupen64plus-video-rice/projects/unix/mupen64plus-video-rice.so" || true
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
-cp -v "mupen64plus-video-rice/projects/unix/mupen64plus-video-rice.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -v "mupen64plus-video-rice/projects/unix/mupen64plus-video-rice.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
+cp -v "mupen64plus-video-rice/data/RiceVideoLinux.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
 
 echo "[8/8] Build complete."

@@ -82,6 +82,10 @@ $STRIP "mupen64plus-core/projects/unix/libmupen64plus.so.2.0.0" || true
 
 echo "[7/8] Move Binary to mupen64plussa"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
+cp -v "mupen64plus-core/projects/unix/libmupen64plus.so.2" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 cp -v "mupen64plus-core/projects/unix/libmupen64plus.so.2.0.0" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -v "mupen64plus-core/data/font.ttf" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -v "mupen64plus-core/data/mupen64plus.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
+cp -av "mupen64plus-core/doc" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 
 echo "[8/8] Build complete."
