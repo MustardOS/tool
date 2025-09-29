@@ -1,0 +1,67 @@
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #121212;
+        --text: #e6e6e6;
+        --surface: #191b1d;
+        --border: #2a2d31;
+
+        --ink: #0f1012;
+        --ink-2: #1a1d21;
+
+        --mustard: #ffdb58;
+        --mustard-ink: #ffdb58;
+    }
+
+    body {
+        color: var(--text);
+        background: var(--bg);
+    }
+
+    a {
+        color: var(--mustard-ink);
+    }
+
+    a:hover, a:focus {
+        text-decoration: underline;
+    }
+
+    #TOC {
+        background: var(--surface);
+        border-color: var(--border);
+    }
+
+    details {
+        background: var(--surface);
+        border-color: var(--border);
+    }
+
+    details[open] > summary {
+        background: var(--ink-2);
+        border-color: var(--border);
+    }
+
+    details > summary::after {
+        background: linear-gradient(90deg, var(--mustard), transparent 65%);
+    }
+
+    pre code {
+        background: var(--ink);
+        color: #eeeeee;
+    }
+
+    th, td {
+        border-color: var(--border);
+    }
+
+    th {
+        background: var(--ink-2);
+    }
+
+    hr, .file-sep {
+        border-top-color: var(--border);
+    }
+
+    pre code span {
+        color: inherit !important;
+    }
+}
