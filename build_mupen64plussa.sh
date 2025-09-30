@@ -7,6 +7,9 @@ if [[ -z "$DEVICE" ]]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="${SCRIPT_DIR}/mp64-scripts"
+
 scripts=(
   "build_mupen64plus-core.sh"
   "build_mupen64plus-audio-sdl.sh"
@@ -19,13 +22,14 @@ scripts=(
 )
 
 for s in "${scripts[@]}"; do
-  if [[ ! -x "$s" ]]; then
-    echo "Error: script not executable or not found: $s" >&2
+  target="${SCRIPTS_DIR}/${s}"
+  if [[ ! -x "$target" ]]; then
+    echo "Error: script not executable or not found: $target" >&2
     exit 1
   fi
-  echo "==> $s $DEVICE"
-  "./$s" "$DEVICE"
-  echo "<== done: $s"
+  echo "==> ${s} ${DEVICE}"
+  "${target}" "${DEVICE}"
+  echo "<== done: ${s}"
 done
 
 echo "All builds completed."
