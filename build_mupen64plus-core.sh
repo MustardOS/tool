@@ -88,7 +88,7 @@ cp -Pv "mupen64plus-core/projects/unix/libmupen64plus.so.2" "$SCRIPT_DIR/mupen64
 cp -v "mupen64plus-core/projects/unix/libmupen64plus.so.2.0.0" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 cp -v "mupen64plus-core/data/font.ttf" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 cp -v "mupen64plus-core/data/mupen64plus.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
-cp -v "mupen64plus-core/data/mupencheat.txt" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
+cp -v "mupen64plus-core/data/mupencheat.txt" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 cp -av "mupen64plus-core/doc" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 
 echo "[8/8] Build complete."
