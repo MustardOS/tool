@@ -89,5 +89,6 @@ mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins"
 cp -v "mupen64plus-video-glide64mk2/projects/unix/mupen64plus-video-glide64mk2.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
 cp -v "mupen64plus-video-glide64mk2/data/Glide64mk2.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
+cp -av "mupen64plus-video-glide64mk2/doc" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 
 echo "[8/8] Build complete."

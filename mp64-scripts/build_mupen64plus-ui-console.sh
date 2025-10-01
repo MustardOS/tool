@@ -85,5 +85,6 @@ mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins"
 cp -v "mupen64plus-ui-console/projects/unix/mupen64plus" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
+cp -av "mupen64plus-ui-console/doc" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/."
 
 echo "[8/8] Build complete."
