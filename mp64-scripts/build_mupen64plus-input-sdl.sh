@@ -85,6 +85,6 @@ mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs"
 mkdir -p "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins"
 cp -v "mupen64plus-input-sdl/projects/unix/mupen64plus-input-sdl.so" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/plugins/."
-cp -v "mupen64plus-input-sdl/data/InputAutoCfg.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/."
+cp -v "mupen64plus-input-sdl/data/InputAutoCfg.ini" "$SCRIPT_DIR/mupen64plussa/$MP_BIN/configs/InputAutoCfg_ORG.ini"
 
 echo "[8/8] Build complete."
