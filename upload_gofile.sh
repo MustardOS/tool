@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -eu
+
 DIR="$1"
 FOLDER_ID="$2"
 UPLOAD_URL="https://upload.gofile.io/uploadFile"
@@ -25,12 +27,6 @@ TARGET_DIR="./$DIR/compress"
 
 FOUND=0
 
-# This is so that the curl progress bar stays within a small
-# range, otherwise if you have a super long terminal it will
-# stretch to the entire width and progress indicator is lost
-ORIGINAL_COLS=$(stty size 2>/dev/null | awk '{print $2}')
-stty cols 100 2>/dev/null
-
 for FILE in "$TARGET_DIR"/*"$IMG_EXT"; do
 	[ -f "$FILE" ] || continue
 	FOUND=1
@@ -51,8 +47,6 @@ for FILE in "$TARGET_DIR"/*"$IMG_EXT"; do
 done
 
 printf "\n"
-
-[ -n "$ORIGINAL_COLS" ] && stty cols "$ORIGINAL_COLS" 2>/dev/null
 
 [ "$FOUND" -eq 0 ] && {
 	printf "No compressed images (%s) found in '%s'\n" "$IMG_EXT" "$TARGET_DIR"
