@@ -2,19 +2,14 @@
 
 set -eu
 
-DIR="$1"
-FOLDER_ID="$2"
+DIR="$2"
+FOLDER_ID="$3"
 UPLOAD_URL="https://upload.gofile.io/uploadFile"
-API_TOKEN=""
+API_TOKEN="$1"
 IMG_EXT=".img.gz"
 
-[ -z "$DIR" ] || [ -z "$FOLDER_ID" ] && {
-	printf "\nUsage: %s <DIRNAME> <FOLDER_ID>\n" "$0"
-	exit 1
-}
-
-[ -z "$API_TOKEN" ] && {
-	printf "\nError: API_TOKEN not provided\n"
+[ -z "$API_TOKEN" ] || [ -z "$DIR" ] || [ -z "$FOLDER_ID" ] && {
+	printf "\nUsage: %s <API_TOKEN> <DIRNAME> <FOLDER_ID>\n" "$0"
 	exit 1
 }
 

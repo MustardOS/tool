@@ -5,9 +5,10 @@ MEGA_PASS=""
 MEGA_PATH=""
 MEGA_DEST=""
 
+GOFILE_API_TOKEN=""
 GOFILE_FOLDER_ID=""
 
 for DEVICE in A133 H700; do
-	./upload_gofile.sh "$DEVICE" "$GOFILE_FOLDER_ID"
+	./upload_gofile.sh "$GOFILE_API_TOKEN" "$DEVICE" "$GOFILE_FOLDER_ID"
 	./upload_mega.sh "$MEGA_USER" "$MEGA_PASS" "$DEVICE" "${MEGA_PATH}/${MEGA_DEST}"
 done
