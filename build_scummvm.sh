@@ -64,13 +64,13 @@ echo "[Step 03] Cloning ScummVM Repository..."
 echo ""
 sleep 1
 
+# Default branch to master if not set
+: "${BRANCH:=master}"
+
 if [ -d "$REPO_DIR/.git" ]; then
     echo "Repo already exists. Updating..."
     cd "$REPO_DIR"
-
-    # Default branch to master if not set
-    : "${BRANCH:=master}"
-
+   
     git fetch --all
     git checkout "$BRANCH"
     git pull --rebase origin "$BRANCH"
