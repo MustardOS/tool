@@ -148,6 +148,32 @@ echo "$ARCHIVES" | while IFS='|' read -r DEF_NAME DEF_TYPE DEF_DIR DEF_ZIP; do
 	}
 done
 
+BASECORE_DIR="$PWD/BASECORE"
+if [ -d "$BASECORE_DIR" ]; then
+	printf "\t\033[1m- Extracting Base Core Archives\033[0m\n"
+	SHARE_POINT="$MOUNT_POINT/opt/muos/share"
+
+	for FILE in "$BASECORE_DIR"/*.muxzip; do
+		[ -f "$FILE" ] || continue
+
+		printf "\t  Processing '%s' Archive\n" "$(basename "$FILE")"
+		TOP_DIRS=$(unzip -Z1 "$FILE" | cut -d'/' -f1 | sort -u)
+
+		for T in $TOP_DIRS; do
+			case "$T" in
+				assign) unzip -oq "$FILE" 'assign/*' -d "$SHARE_POINT/info" ;;
+				core) unzip -oq "$FILE" 'core/*' -d "$SHARE_POINT" ;;
+				emulator) unzip -oq "$FILE" 'emulator/*' -d "$SHARE_POINT" ;;
+				*) ;;
+			esac
+		done
+	done
+
+	printf "\t  Base Core Extraction Complete!\n\n"
+else
+	printf "\t  No Base Core Directory found, skipping...\n\n"
+fi
+
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
 find "$MOUNT_POINT/opt/muos/." -name ".gitkeep" -delete
 
