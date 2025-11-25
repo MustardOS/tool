@@ -150,7 +150,7 @@ done
 
 BASECORE_DIR="$PWD/BASECORE"
 if [ -d "$BASECORE_DIR" ]; then
-	printf "\t\033[1m- Extracting Base Core Archives\033[0m\n"
+	printf "\n\t\033[1m- Extracting Base Core Archives\033[0m\n"
 	SHARE_POINT="$MOUNT_POINT/opt/muos/share"
 
 	for FILE in "$BASECORE_DIR"/*.muxzip; do
@@ -168,10 +168,8 @@ if [ -d "$BASECORE_DIR" ]; then
 			esac
 		done
 	done
-
-	printf "\t  Base Core Extraction Complete!\n\n"
 else
-	printf "\t  No Base Core Directory found, skipping...\n\n"
+	printf "\t  No Base Core Directory found, skipping...\n"
 fi
 
 printf "\n\t\033[1m- Removing Leftover Files\033[0m\n"
