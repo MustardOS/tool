@@ -1,0 +1,20 @@
+--- RetroArch/menu/menu_driver.c.orig	2026-01-12 20:35:01.603135464 +1000
++++ RetroArch/menu/menu_driver.c	2026-01-12 21:00:57.512072041 +1000
+@@ -6505,11 +6505,16 @@
+    bool input_overlay_enable          = false;
+ #endif
+    bool video_adaptive_vsync          = false;
+    bool video_vsync                   = false;
+    bool video_frame_delay_auto        = false;
+-
++   
++   if (menu_driver_alive)
++    system("touch /run/muos/overlay.disable");
++   else
++    system("rm -f /run/muos/overlay.disable");
++   
+    if (settings)
+    {
+ #ifdef HAVE_NETWORKING
+       menu_pause_libretro             = settings->bools.menu_pause_libretro
+             && netplay_driver_ctl(RARCH_NETPLAY_CTL_ALLOW_PAUSE, NULL);
