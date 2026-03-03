@@ -5,7 +5,22 @@
 # ==== About ====
 # ScummVM build script for MustardOS
 # Created specifically for MustardOS 2508.0 Goose
-# This assumes you have a Cross Compile environment setup with appropriate toolchains.
+# This assumes you have a Cross Compilation environment setup with an appropriate toolchains.
+
+# ===== Usage =====
+usage() {
+    echo "Usage: $(basename "$0") <device> [branch]"
+    echo ""
+    echo "  device   Target device. Supported: h700, a133p, rk3326"
+    echo "  branch   Git branch to build (default: master)"
+    echo ""
+    echo "Examples:"
+    echo "  $(basename "$0") h700"
+    echo "  $(basename "$0") h700 branch-2026-1-0"
+    exit 1
+}
+
+[ -z "$1" ] && usage
 
 # Stop if any command fails
 set -e
@@ -34,10 +49,15 @@ case "$DEVICE" in
         ;;
 esac
 
+# ===== Branch =====
+BRANCH="$2"
+
+# Default branch to master if not set
+: "${BRANCH:=master}"
+
 # ===== Settings =====
 REPO_URL="https://github.com/scummvm/scummvm.git"
 REPO_DIR="scummvm"
-BRANCH="branch-2-9-1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT_DIR="$SCRIPT_DIR/scummvm/output"
 
@@ -63,9 +83,6 @@ export LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib"
 echo "[Step 03] Cloning ScummVM Repository..."
 echo ""
 sleep 1
-
-# Default branch to master if not set
-: "${BRANCH:=master}"
 
 if [ -d "$REPO_DIR/.git" ]; then
     echo "Repo already exists. Updating..."
