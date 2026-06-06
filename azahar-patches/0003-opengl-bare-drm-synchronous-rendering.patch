@@ -1,0 +1,311 @@
+diff --git a/src/citra_sdl/citra_sdl.cpp b/src/citra_sdl/citra_sdl.cpp
+index 58a96ea86..65c10ebdb 100644
+--- a/src/citra_sdl/citra_sdl.cpp
++++ b/src/citra_sdl/citra_sdl.cpp
+@@ -376,6 +376,20 @@ int LaunchSdlFrontend(int argc, char** argv) {
+ 
+     EmuWindow_SDL2::InitializeSDL2();
+ 
++    // On bare KMS/DRM (e.g. muOS handhelds) there is no window manager. The async, multi-threaded
++    // OpenGL mailbox present path relies on multiple GL contexts that corrupt state / stall fences
++    // on this stack (notably Mali), producing a black screen. Force fullscreen and synchronous
++    // rendering (single context, render + swap on the emulation thread) there.
++    if (const char* video_driver = SDL_GetCurrentVideoDriver();
++        video_driver && (std::strcmp(video_driver, "KMSDRM") == 0 ||
++                         std::strcmp(video_driver, "kmsdrm") == 0)) {
++        fullscreen = true;
++        Settings::values.async_presentation = false;
++        LOG_INFO(Frontend,
++                 "Bare KMS/DRM detected ({}): forcing fullscreen and synchronous presentation",
++                 video_driver);
++    }
++
+     const auto create_emu_window = [&](bool fullscreen,
+                                        bool is_secondary) -> std::unique_ptr<EmuWindow_SDL2> {
+         const auto graphics_api = Settings::values.graphics_api.GetValue();
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp b/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp
+index f2fc28dc3..c40240448 100644
+--- a/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp
+@@ -3,18 +3,54 @@
+ // Refer to the license.txt file included.
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <cstdlib>
++#include <cstring>
+ #include <string>
++#include <thread>
+ #define SDL_MAIN_HANDLED
+ #include <SDL.h>
+ #include <glad/glad.h>
+ #include "citra_sdl/emu_window/emu_window_sdl2_gl.h"
++#include "common/logging/log.h"
+ #include "common/scm_rev.h"
+ #include "common/settings.h"
+ #include "core/core.h"
+ #include "video_core/gpu.h"
+ #include "video_core/renderer_base.h"
+ 
++namespace {
++// muOS handhelds run on bare KMS/DRM (no window manager). The GBM/multi-threaded GL present path
++// behaves very differently there (see the KMSDRM-specific handling throughout this file), so detect
++// it once.
++bool IsBareDRM() {
++    const char* driver = SDL_GetCurrentVideoDriver();
++    return driver != nullptr &&
++           (std::strcmp(driver, "KMSDRM") == 0 || std::strcmp(driver, "kmsdrm") == 0);
++}
++} // Anonymous namespace
++
++// On bare KMS/DRM, multiple GL contexts on the same window corrupt GL state and the Mali driver
++// stalls cross-context fences. So instead of creating a second (shared) context for the core, we
++// hand back a wrapper around the existing window context and run rendering synchronously on the
++// emulation thread. This wrapper owns nothing; it just binds/unbinds the shared window context.
++class DummySDLGLContext : public Frontend::GraphicsContext {
++public:
++    DummySDLGLContext(SDL_Window* window_, void* context_) : window{window_}, context{context_} {}
++
++    void MakeCurrent() override {
++        SDL_GL_MakeCurrent(window, context);
++    }
++
++    void DoneCurrent() override {
++        SDL_GL_MakeCurrent(window, nullptr);
++    }
++
++private:
++    SDL_Window* window;
++    void* context;
++};
++
+ class SDLGLContext : public Frontend::GraphicsContext {
+ public:
+     using SDL_GLContext = void*;
+@@ -43,7 +79,7 @@ private:
+     SDL_GLContext context;
+ };
+ 
+-static SDL_Window* CreateGLWindow(const std::string& window_title, bool gles) {
++static void SetGLContextAttributes(bool gles) {
+     if (gles) {
+         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+@@ -53,12 +89,38 @@ static SDL_Window* CreateGLWindow(const std::string& window_title, bool gles) {
+         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+     }
+-    return SDL_CreateWindow(window_title.c_str(),
+-                            SDL_WINDOWPOS_UNDEFINED, // x position
+-                            SDL_WINDOWPOS_UNDEFINED, // y position
+-                            Core::kScreenTopWidth,
+-                            Core::kScreenTopHeight + Core::kScreenBottomHeight,
+-                            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
++}
++
++static SDL_Window* CreateGLWindow(const std::string& window_title, bool gles) {
++    SetGLContextAttributes(gles);
++
++    int width = Core::kScreenTopWidth;
++    int height = Core::kScreenTopHeight + Core::kScreenBottomHeight;
++    Uint32 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
++
++    // On bare KMS/DRM there is no window manager: SDL scans the rendered GBM buffer out as the whole
++    // CRTC, so a small non-fullscreen window never lights up the panel. Create at the native display
++    // mode and go fullscreen from the start. RESIZABLE is meaningless on bare DRM and can break
++    // scanout, so only request it elsewhere.
++    SDL_DisplayMode display_mode;
++    if (IsBareDRM() && SDL_GetDesktopDisplayMode(0, &display_mode) == 0) {
++        width = display_mode.w;
++        height = display_mode.h;
++        window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
++    } else {
++        window_flags |= SDL_WINDOW_RESIZABLE;
++    }
++
++    LOG_INFO(Frontend, "GL window: video_driver={} requested {}x{} flags=0x{:08x}",
++             SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(null)", width, height,
++             window_flags);
++
++    SDL_Window* window = SDL_CreateWindow(window_title.c_str(), SDL_WINDOWPOS_UNDEFINED,
++                                          SDL_WINDOWPOS_UNDEFINED, width, height, window_flags);
++    if (window == nullptr) {
++        LOG_ERROR(Frontend, "GL window: SDL_CreateWindow failed: {}", SDL_GetError());
++    }
++    return window;
+ }
+ 
+ EmuWindow_SDL2_GL::EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, bool is_secondary)
+@@ -70,8 +132,8 @@ EmuWindow_SDL2_GL::EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, boo
+     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+     // Enable context sharing for the shared context
+     SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
+-    // Enable vsync
+-    SDL_GL_SetSwapInterval(1);
++    // NOTE: SDL_GL_SetSwapInterval must be called after a context exists, so it is done in
++    // Present()/SwapBuffers() rather than here.
+     // Enable debug context
+     if (Settings::values.renderer_debug) {
+         SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+@@ -93,10 +155,19 @@ EmuWindow_SDL2_GL::EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, boo
+ 
+     strict_context_required = std::strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0;
+ 
+-    dummy_window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0,
+-                                    SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL);
++    const bool is_bare_drm = IsBareDRM();
+ 
+-    if (fullscreen) {
++    // The hidden dummy window interferes with KMSDRM scanout, so skip it there.
++    if (!is_bare_drm) {
++        dummy_window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0,
++                                        SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL);
++    } else {
++        dummy_window = nullptr;
++        // Already fullscreen at the native display mode (see CreateGLWindow); just hide the cursor.
++        SDL_ShowCursor(false);
++    }
++
++    if (fullscreen && !is_bare_drm) {
+         Fullscreen();
+     }
+ 
+@@ -128,6 +199,13 @@ EmuWindow_SDL2_GL::EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, boo
+     OnResize();
+     OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
+     SDL_PumpEvents();
++
++    int draw_w = 0, draw_h = 0;
++    SDL_GL_GetDrawableSize(render_window, &draw_w, &draw_h);
++    const auto& layout = GetFramebufferLayout();
++    LOG_INFO(Frontend, "GL window ready: drawable={}x{} layout={}x{} flags=0x{:08x} sync={}", draw_w,
++             draw_h, layout.width, layout.height, SDL_GetWindowFlags(render_window),
++             !Settings::values.async_presentation.GetValue());
+ }
+ 
+ EmuWindow_SDL2_GL::~EmuWindow_SDL2_GL() {
+@@ -137,6 +215,11 @@ EmuWindow_SDL2_GL::~EmuWindow_SDL2_GL() {
+ }
+ 
+ std::unique_ptr<Frontend::GraphicsContext> EmuWindow_SDL2_GL::CreateSharedContext() const {
++    // On bare KMS/DRM a second real context corrupts GL state and stalls Mali cross-context fences,
++    // so wrap the existing window context and run synchronously instead.
++    if (IsBareDRM()) {
++        return std::make_unique<DummySDLGLContext>(render_window, window_context);
++    }
+     return std::make_unique<SDLGLContext>();
+ }
+ 
+@@ -157,6 +240,16 @@ void EmuWindow_SDL2_GL::RestoreContext() {
+ }
+ 
+ void EmuWindow_SDL2_GL::Present() {
++    // In synchronous mode (forced on bare KMS/DRM), rendering and swapping happen on the emulation
++    // thread via SwapBuffers(). This present thread only needs to stay alive until the window closes.
++    if (!Settings::values.async_presentation.GetValue()) {
++        while (IsOpen()) {
++            std::this_thread::sleep_for(std::chrono::milliseconds(100));
++        }
++        return;
++    }
++
++    // Async mode: mailbox-based presentation on a dedicated thread/context.
+     SDL_GL_MakeCurrent(render_window, window_context);
+     SDL_GL_SetSwapInterval(1);
+     while (IsOpen()) {
+@@ -165,3 +258,24 @@ void EmuWindow_SDL2_GL::Present() {
+     }
+     SDL_GL_MakeCurrent(render_window, nullptr);
+ }
++
++void EmuWindow_SDL2_GL::SwapBuffers() {
++    // Called from the emulation thread in synchronous rendering mode.
++    static bool first_swap = true;
++    if (first_swap) {
++        SDL_GL_SetSwapInterval(1); // vsync
++        first_swap = false;
++    }
++
++    // Mali is a tile-based deferred renderer: make sure all rendering commands have completed
++    // before the buffer is scanned out, otherwise partially-rendered tiles can be displayed.
++    glFinish();
++
++    SDL_GL_SwapWindow(render_window);
++
++    // After the swap we own a different (double/triple buffered) back buffer that may still hold
++    // stale content. Clear it so the next frame starts from a known-black state.
++    glDisable(GL_SCISSOR_TEST);
++    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT);
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_gl.h b/src/citra_sdl/emu_window/emu_window_sdl2_gl.h
+index 6e9045cba..8e1cf9a82 100644
+--- a/src/citra_sdl/emu_window/emu_window_sdl2_gl.h
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_gl.h
+@@ -19,6 +19,7 @@ public:
+     ~EmuWindow_SDL2_GL();
+ 
+     void Present() override;
++    void SwapBuffers() override; // Used in synchronous rendering mode (bare KMS/DRM)
+     std::unique_ptr<GraphicsContext> CreateSharedContext() const override;
+     void MakeCurrent() override;
+     void DoneCurrent() override;
+diff --git a/src/video_core/renderer_opengl/renderer_opengl.cpp b/src/video_core/renderer_opengl/renderer_opengl.cpp
+index c8cb6c000..ccd1e7fe2 100644
+--- a/src/video_core/renderer_opengl/renderer_opengl.cpp
++++ b/src/video_core/renderer_opengl/renderer_opengl.cpp
+@@ -103,7 +103,20 @@ void RendererOpenGL::SwapBuffers() {
+     render_window.SwapBuffers();
+ #else
+     const auto& main_layout = render_window.GetFramebufferLayout();
+-    RenderToMailbox(main_layout, render_window.mailbox, false);
++
++    // On bare KMS/DRM, the async mailbox path (a second GL context + a dedicated present thread)
++    // corrupts GL state and stalls Mali cross-context fences, giving a black screen. When async
++    // presentation is disabled we render directly into the window's default framebuffer and swap
++    // it on this (emulation) thread instead.
++    if (!Settings::values.async_presentation.GetValue()) {
++        state.draw.draw_framebuffer = 0;
++        state.Apply();
++        DrawScreens(main_layout, false);
++        glFlush();
++        render_window.SwapBuffers();
++    } else {
++        RenderToMailbox(main_layout, render_window.mailbox, false);
++    }
+ 
+ #ifdef ANDROID
+     // On Android, if secondary_window is defined at all,
+@@ -219,7 +232,9 @@ void RendererOpenGL::RenderToMailbox(const Layout::FramebufferLayout& layout,
+ 
+         // wait for the presentation to be done
+         if (frame->present_fence) {
+-            glWaitSync(frame->present_fence, 0, GL_TIMEOUT_IGNORED);
++            // Use GL_SYNC_FLUSH_COMMANDS_BIT so the cross-context fence is properly visible on GLES
++            // drivers (e.g. Mali) that require the consuming context to flush before polling.
++            glClientWaitSync(frame->present_fence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+             glDeleteSync(frame->present_fence);
+             frame->present_fence = nullptr;
+         }
+@@ -871,7 +886,12 @@ void RendererOpenGL::TryPresent(int timeout_ms, bool is_secondary) {
+         LOG_DEBUG(Render_OpenGL, "Reloading present frame");
+         window.mailbox->ReloadPresentFrame(frame, layout.width, layout.height);
+     }
+-    glWaitSync(frame->render_fence, 0, GL_TIMEOUT_IGNORED);
++    // Use a CPU-side wait (glClientWaitSync) rather than a GPU-side wait (glWaitSync) for the
++    // cross-context render fence. On some GLES drivers (notably Mali Bifrost/Valhall) a glWaitSync
++    // on a fence created in a different shared context can stall the GPU command queue permanently,
++    // so the blit and everything after it never execute. glClientWaitSync with
++    // GL_SYNC_FLUSH_COMMANDS_BIT is safe and portable across GLES 3.x.
++    glClientWaitSync(frame->render_fence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+     // INTEL workaround.
+     // Normally we could just delete the draw fence here, but due to driver bugs, we can just delete
+     // it on the emulation thread without too much penalty
+@@ -879,6 +899,7 @@ void RendererOpenGL::TryPresent(int timeout_ms, bool is_secondary) {
+     // frame.render_sync = 0;
+ 
+     glBindFramebuffer(GL_READ_FRAMEBUFFER, frame->present.handle);
++    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // Explicitly target the default/window framebuffer
+     glBlitFramebuffer(0, 0, frame->width, frame->height, 0, 0, layout.width, layout.height,
+                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
+ 

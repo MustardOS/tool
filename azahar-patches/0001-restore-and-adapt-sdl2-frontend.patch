@@ -1,0 +1,2718 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3d58cc70d..2ecd3f351 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -109,6 +109,7 @@ foreach(_opt IN LISTS _LIBRETRO_INCOMPATIBLE_OPTIONS)
+ endforeach()
+ 
+ option(ENABLE_SDL2 "Enable using SDL2" ON)
++CMAKE_DEPENDENT_OPTION(ENABLE_SDL2_FRONTEND "Enable the SDL2 frontend" OFF "ENABLE_SDL2;NOT ANDROID AND NOT IOS" OFF)
+ option(USE_SYSTEM_SDL2 "Use the system SDL2 lib (instead of the bundled one)" OFF)
+ 
+ # Set bundled qt as dependent options.
+@@ -188,6 +189,9 @@ endif()
+ if (ENABLE_SDL2)
+     add_definitions(-DENABLE_SDL2)
+ endif()
++if (ENABLE_SDL2_FRONTEND)
++    add_definitions(-DENABLE_SDL2_FRONTEND)
++endif()
+ 
+ if(ENABLE_SSE42 AND (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64"))
+     message(STATUS "SSE4.2 enabled for x86_64")
+@@ -558,6 +562,8 @@ if (NOT ANDROID AND NOT IOS)
+     include(BundleTarget)
+     if (ENABLE_QT)
+         qt_bundle_target(citra_meta)
++    elseif (ENABLE_SDL2_FRONTEND)
++        bundle_target(citra_meta)
+     endif()
+     if (ENABLE_ROOM_STANDALONE)
+         bundle_target(citra_room_standalone)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 15799c0c4..ed0a04081 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -198,11 +198,15 @@ if (ENABLE_TESTS)
+     add_subdirectory(tests)
+ endif()
+ 
++if (ENABLE_SDL2_FRONTEND)
++    add_subdirectory(citra_sdl)
++endif()
++
+ if (ENABLE_QT)
+     add_subdirectory(citra_qt)
+ endif()
+ 
+-if (ENABLE_QT) # Or any other hypothetical future frontends
++if (ENABLE_QT OR ENABLE_SDL2_FRONTEND)
+     add_subdirectory(citra_meta)
+ endif()
+ 
+diff --git a/src/citra_meta/CMakeLists.txt b/src/citra_meta/CMakeLists.txt
+index b19238a9c..33d5a6884 100644
+--- a/src/citra_meta/CMakeLists.txt
++++ b/src/citra_meta/CMakeLists.txt
+@@ -50,6 +50,10 @@ endif()
+ 
+ target_link_libraries(citra_meta PRIVATE citra_common fmt)
+ 
++if (ENABLE_SDL2_FRONTEND)
++    target_link_libraries(citra_meta PRIVATE citra_sdl)
++endif()
++
+ if (ENABLE_QT)
+     target_link_libraries(citra_meta PRIVATE citra_qt)
+     target_link_libraries(citra_meta PRIVATE Boost::boost Qt6::Widgets)
+diff --git a/src/citra_meta/common_strings.h b/src/citra_meta/common_strings.h
+index 0276b697f..4d78f3a05 100644
+--- a/src/citra_meta/common_strings.h
++++ b/src/citra_meta/common_strings.h
+@@ -19,6 +19,13 @@ constexpr char help_string[] =
+     "-r, --movie-record [path]   Record a TAS movie to the given file path\n"
+     "-a, --movie-record-author [author]   Set the author for the recorded TAS movie (to be used "
+     "alongside --movie-record)\n"
++#ifdef ENABLE_SDL2_FRONTEND
++    "-n, --no-gui                Use the lightweight SDL frontend instead of the usual Qt "
++    "frontend\n"
++    // TODO: Move -m outside of this check when it is implemented in Qt frontend
++    "-m, --multiplayer [nick:password@address:port]   Nickname, password, address and port for "
++    "multiplayer (currently only usable with SDL frontend)\n"
++#endif
+ #ifdef ENABLE_ROOM
+     "    --room                  Utilize dedicated multiplayer room functionality (equivalent to "
+     "the old citra-room executable)\n"
+diff --git a/src/citra_meta/main.cpp b/src/citra_meta/main.cpp
+index b7a7e5584..f7b32b48b 100644
+--- a/src/citra_meta/main.cpp
++++ b/src/citra_meta/main.cpp
+@@ -7,16 +7,15 @@
+ #include "common/detached_tasks.h"
+ #include "common/scope_exit.h"
+ 
+-#if !defined(ENABLE_QT)
+-#error "citra_meta is somehow building with no frontend. This should be impossible!"
+-#endif
+-
+ #ifdef ENABLE_QT
+ #include "citra_qt/citra_qt.h"
+ #endif
+ #ifdef ENABLE_ROOM
+ #include "citra_room/citra_room.h"
+ #endif
++#ifdef ENABLE_SDL2_FRONTEND
++#include "citra_sdl/citra_sdl.h"
++#endif
+ 
+ #ifdef _WIN32
+ extern "C" {
+@@ -73,6 +72,25 @@ int main(int argc, char* argv[]) {
+ #endif
+ 
+ #if ENABLE_QT
+-    return LaunchQtFrontend(argc, argv);
++    bool no_gui = false;
++    for (int i = 1; i < argc; i++) {
++        if (strcmp(argv[i], "--no-gui") == 0 || strcmp(argv[i], "-n") == 0) {
++            no_gui = true;
++        }
++    }
++
++    if (!no_gui) {
++        return LaunchQtFrontend(argc, argv);
++    }
+ #endif
++
++#if ENABLE_SDL2_FRONTEND
++    return LaunchSdlFrontend(argc, argv);
++#else
++    std::cout << "Cannot use SDL frontend as it was disabled at compile time. Exiting."
++              << std::endl;
++    return -1;
++#endif
++
++    return 0;
+ }
+diff --git a/src/citra_sdl/CMakeLists.txt b/src/citra_sdl/CMakeLists.txt
+new file mode 100644
+index 000000000..cf3deda2d
+--- /dev/null
++++ b/src/citra_sdl/CMakeLists.txt
+@@ -0,0 +1,48 @@
++set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
++
++add_library(citra_sdl STATIC EXCLUDE_FROM_ALL
++    config.cpp
++    config.h
++    default_ini.h
++    emu_window/emu_window_sdl2.cpp
++    emu_window/emu_window_sdl2.h
++    citra_sdl.cpp
++    precompiled_headers.h
++    resource.h
++)
++
++if (ENABLE_SOFTWARE_RENDERER)
++    target_sources(citra_sdl PRIVATE
++        emu_window/emu_window_sdl2_sw.cpp
++        emu_window/emu_window_sdl2_sw.h
++    )
++endif()
++if (ENABLE_OPENGL)
++    target_sources(citra_sdl PRIVATE
++        emu_window/emu_window_sdl2_gl.cpp
++        emu_window/emu_window_sdl2_gl.h
++    )
++endif()
++if (ENABLE_VULKAN)
++    target_sources(citra_sdl PRIVATE
++        emu_window/emu_window_sdl2_vk.cpp
++        emu_window/emu_window_sdl2_vk.h
++    )
++endif()
++
++create_target_directory_groups(citra_sdl)
++
++target_link_libraries(citra_sdl PRIVATE citra_common citra_core input_common network)
++target_link_libraries(citra_sdl PRIVATE inih)
++if (MSVC)
++    target_link_libraries(citra_sdl PRIVATE getopt)
++endif()
++target_link_libraries(citra_sdl PRIVATE ${PLATFORM_LIBRARIES} SDL2::SDL2 Threads::Threads)
++
++if (ENABLE_OPENGL)
++    target_link_libraries(citra_sdl PRIVATE glad)
++endif()
++
++if (CITRA_USE_PRECOMPILED_HEADERS)
++    target_precompile_headers(citra_sdl PRIVATE precompiled_headers.h)
++endif()
+diff --git a/src/citra_sdl/citra_sdl.cpp b/src/citra_sdl/citra_sdl.cpp
+new file mode 100644
+index 000000000..58a96ea86
+--- /dev/null
++++ b/src/citra_sdl/citra_sdl.cpp
+@@ -0,0 +1,560 @@
++// Copyright Citra Emulator Project / Azahar Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <csignal>
++#include <cstring>
++#include <iostream>
++#include <memory>
++#include <regex>
++#include <string>
++#include <thread>
++#if defined(__linux__)
++#include <execinfo.h>
++#include <unistd.h>
++#endif
++
++// This needs to be included before getopt.h because the latter #defines symbols used by it
++#include "common/microprofile.h"
++
++#include "citra_sdl/config.h"
++#include "citra_sdl/emu_window/emu_window_sdl2.h"
++#ifdef ENABLE_OPENGL
++#include "citra_sdl/emu_window/emu_window_sdl2_gl.h"
++#endif
++#ifdef ENABLE_SOFTWARE_RENDERER
++#include "citra_sdl/emu_window/emu_window_sdl2_sw.h"
++#endif
++#ifdef ENABLE_VULKAN
++#include "citra_sdl/emu_window/emu_window_sdl2_vk.h"
++#endif
++#include "SDL_messagebox.h"
++#include "citra_meta/common_strings.h"
++#include "common/common_paths.h"
++#include "common/file_util.h"
++#include "common/logging/backend.h"
++#include "common/logging/log.h"
++#include "common/scm_rev.h"
++#include "common/scope_exit.h"
++#include "common/settings.h"
++#include "common/string_util.h"
++#include "core/core.h"
++#include "core/dumping/backend.h"
++#include "core/dumping/ffmpeg_backend.h"
++#include "core/frontend/applets/default_applets.h"
++#include "core/frontend/framebuffer_layout.h"
++#include "core/hle/service/am/am.h"
++#include "core/hle/service/cfg/cfg.h"
++#include "core/movie.h"
++#include "input_common/main.h"
++#include "network/network.h"
++#include "video_core/gpu.h"
++#include "video_core/renderer_base.h"
++
++#ifdef __unix__
++#include "common/linux/gamemode.h"
++#endif
++
++#undef _UNICODE
++#include <getopt.h>
++#ifndef _MSC_VER
++#include <unistd.h>
++#endif
++
++#ifdef _WIN32
++// windows.h needs to be included before shellapi.h
++#include <windows.h>
++
++#include <shellapi.h>
++#endif
++
++static void ShowCommandOutput(std::string title, std::string message) {
++#ifdef _WIN32
++    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title.c_str(), message.c_str(), NULL);
++#else
++    std::cout << message << std::endl;
++#endif
++}
++
++static void PrintHelp(const char* argv0) {
++    ShowCommandOutput("Help", fmt::format(Common::help_string, argv0));
++}
++
++static void OnStateChanged(const Network::RoomMember::State& state) {
++    switch (state) {
++    case Network::RoomMember::State::Idle:
++        LOG_DEBUG(Network, "Network is idle");
++        break;
++    case Network::RoomMember::State::Joining:
++        LOG_DEBUG(Network, "Connection sequence to room started");
++        break;
++    case Network::RoomMember::State::Joined:
++        LOG_DEBUG(Network, "Successfully joined to the room");
++        break;
++    case Network::RoomMember::State::Moderator:
++        LOG_DEBUG(Network, "Successfully joined the room as a moderator");
++        break;
++    default:
++        break;
++    }
++}
++
++static void OnNetworkError(const Network::RoomMember::Error& error) {
++    switch (error) {
++    case Network::RoomMember::Error::LostConnection:
++        LOG_DEBUG(Network, "Lost connection to the room");
++        break;
++    case Network::RoomMember::Error::CouldNotConnect:
++        LOG_ERROR(Network, "Error: Could not connect");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::NameCollision:
++        LOG_ERROR(
++            Network,
++            "You tried to use the same nickname as another user that is connected to the Room");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::MacCollision:
++        LOG_ERROR(Network, "You tried to use the same MAC-Address as another user that is "
++                           "connected to the Room");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::ConsoleIdCollision:
++        LOG_ERROR(Network, "Your Console ID conflicted with someone else in the Room");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::WrongPassword:
++        LOG_ERROR(Network, "Room replied with: Wrong password");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::WrongVersion:
++        LOG_ERROR(Network,
++                  "You are using a different version than the room you are trying to connect to");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::RoomIsFull:
++        LOG_ERROR(Network, "The room is full");
++        std::exit(1);
++        break;
++    case Network::RoomMember::Error::HostKicked:
++        LOG_ERROR(Network, "You have been kicked by the host");
++        break;
++    case Network::RoomMember::Error::HostBanned:
++        LOG_ERROR(Network, "You have been banned by the host");
++        break;
++    default:
++        LOG_ERROR(Network, "Unknown network error: {}", error);
++        break;
++    }
++}
++
++static void OnMessageReceived(const Network::ChatEntry& msg) {
++    std::cout << std::endl << msg.nickname << ": " << msg.message << std::endl << std::endl;
++}
++
++static void OnStatusMessageReceived(const Network::StatusMessageEntry& msg) {
++    std::string message;
++    switch (msg.type) {
++    case Network::IdMemberJoin:
++        message = fmt::format("{} has joined", msg.nickname);
++        break;
++    case Network::IdMemberLeave:
++        message = fmt::format("{} has left", msg.nickname);
++        break;
++    case Network::IdMemberKicked:
++        message = fmt::format("{} has been kicked", msg.nickname);
++        break;
++    case Network::IdMemberBanned:
++        message = fmt::format("{} has been banned", msg.nickname);
++        break;
++    case Network::IdAddressUnbanned:
++        message = fmt::format("{} has been unbanned", msg.nickname);
++        break;
++    }
++    if (!message.empty())
++        std::cout << std::endl << "* " << message << std::endl << std::endl;
++}
++
++/// Application entry point
++#if defined(__linux__)
++static void CrashBacktraceHandler(int sig) {
++    void* frames[64];
++    const int n = backtrace(frames, 64);
++    const char* hdr = "\n=== Azahar crashed - backtrace follows ===\n";
++    [[maybe_unused]] auto _ = write(STDERR_FILENO, hdr, std::strlen(hdr));
++    backtrace_symbols_fd(frames, n, STDERR_FILENO);
++    // Restore default disposition and re-raise so exit status / core dump are preserved.
++    signal(sig, SIG_DFL);
++    raise(sig);
++}
++#endif
++
++static void InstallCrashHandler() {
++#if defined(__linux__)
++    // Installed before Core init so dynarmic's fastmem handler chains to us on unhandled faults.
++    // (Also active as the sole handler when the JIT is disabled.)
++    signal(SIGSEGV, CrashBacktraceHandler);
++    signal(SIGABRT, CrashBacktraceHandler);
++#endif
++}
++
++int LaunchSdlFrontend(int argc, char** argv) {
++    InstallCrashHandler();
++    Common::Log::Initialize();
++    Common::Log::SetColorConsoleBackendEnabled(true);
++    Common::Log::Start();
++    SdlConfig config;
++    int option_index = 0;
++    bool use_gdbstub = Settings::values.use_gdbstub.GetValue();
++    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port.GetValue());
++    std::string movie_record;
++    std::string movie_record_author;
++    std::string movie_play;
++    std::string dump_video;
++
++    char* endarg;
++#ifdef _WIN32
++    int argc_w;
++    auto argv_w = CommandLineToArgvW(GetCommandLineW(), &argc_w);
++
++    if (argv_w == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to get command line arguments");
++        return -1;
++    }
++#endif
++    std::string filepath;
++
++    bool use_multiplayer = false;
++    bool fullscreen = false;
++    std::string nickname{};
++    std::string password{};
++    std::string address{};
++    u16 port = Network::DefaultRoomPort;
++
++    static struct option long_options[] = {
++        {"dump-video", required_argument, 0, 'd'},
++        {"fullscreen", no_argument, 0, 'f'},
++        {"gdbport", required_argument, 0, 'g'},
++        {"help", no_argument, 0, 'h'},
++        {"install", required_argument, 0, 'i'},
++        {"movie-play", required_argument, 0, 'p'},
++        {"movie-record", required_argument, 0, 'r'},
++        {"movie-record-author", required_argument, 0, 'a'},
++        {"multiplayer", required_argument, 0, 'm'},
++        {"version", no_argument, 0, 'v'},
++        {"windowed", no_argument, 0, 'w'},
++        {0, 0, 0, 0},
++    };
++
++    while (optind < argc) {
++        int arg = getopt_long(argc, argv, "d:fg:hi:p:r:a:m:nvw", long_options, &option_index);
++        if (arg != -1) {
++            switch (static_cast<char>(arg)) {
++            case 'd':
++                dump_video = optarg;
++                break;
++            case 'f':
++                fullscreen = true;
++                LOG_INFO(Frontend, "Starting in fullscreen mode...");
++                break;
++            case 'g':
++                errno = 0;
++                gdb_port = strtoul(optarg, &endarg, 0);
++                use_gdbstub = true;
++                if (endarg == optarg)
++                    errno = EINVAL;
++                if (errno != 0) {
++                    perror("--gdbport");
++                    return 1;
++                }
++                break;
++            case 'h':
++                PrintHelp(argv[0]);
++                return 0;
++            case 'i': {
++                const auto cia_progress = [](std::size_t written, std::size_t total) {
++                    LOG_INFO(Frontend, "{:02d}%", (written * 100 / total));
++                };
++                if (Service::AM::InstallCIA(std::string(optarg), cia_progress) !=
++                    Service::AM::InstallStatus::Success)
++                    errno = EINVAL;
++                if (errno != 0)
++                    return 1;
++                break;
++            }
++            case 'p':
++                movie_play = optarg;
++                break;
++            case 'r':
++                movie_record = optarg;
++                break;
++            case 'a':
++                movie_record_author = optarg;
++                break;
++            case 'm': {
++                use_multiplayer = true;
++                const std::string str_arg(optarg);
++                // regex to check if the format is nickname:password@ip:port
++                // with optional :password
++                const std::regex re("^([^:]+)(?::(.+))?@([^:]+)(?::([0-9]+))?$");
++                if (!std::regex_match(str_arg, re)) {
++                    std::cout << "Wrong format for option --multiplayer\n";
++                    PrintHelp(argv[0]);
++                    return 0;
++                }
++
++                std::smatch match;
++                std::regex_search(str_arg, match, re);
++                ASSERT(match.size() == 5);
++                nickname = match[1];
++                password = match[2];
++                address = match[3];
++                if (!match[4].str().empty())
++                    port = std::stoi(match[4]);
++                std::regex nickname_re("^[a-zA-Z0-9._\\- ]+$");
++                if (!std::regex_match(nickname, nickname_re)) {
++                    std::cout
++                        << "Nickname is not valid. Must be 4 to 20 alphanumeric characters.\n";
++                    return 0;
++                }
++                if (address.empty()) {
++                    std::cout << "Address to room must not be empty.\n";
++                    return 0;
++                }
++                break;
++            }
++            case 'v':
++                const std::string version_string =
++                    std::string("Azahar ") + Common::g_build_fullname;
++                ShowCommandOutput("Version", version_string);
++                return 0;
++            }
++        } else {
++#ifdef _WIN32
++            filepath = Common::UTF16ToUTF8(argv_w[optind]);
++#else
++            filepath = argv[optind];
++#endif
++            optind++;
++        }
++    }
++
++#ifdef _WIN32
++    LocalFree(argv_w);
++#endif
++
++    MicroProfileOnThreadCreate("EmuThread");
++    SCOPE_EXIT({ MicroProfileShutdown(); });
++
++    if (filepath.empty()) {
++        LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
++        return -1;
++    }
++
++    if (!movie_record.empty() && !movie_play.empty()) {
++        LOG_CRITICAL(Frontend, "Cannot both play and record a movie");
++        return -1;
++    }
++
++    auto& system = Core::System::GetInstance();
++    auto& movie = system.Movie();
++
++    if (!movie_record.empty()) {
++        movie.PrepareForRecording();
++    }
++    if (!movie_play.empty()) {
++        movie.PrepareForPlayback(movie_play);
++    }
++
++    // Apply the command line arguments
++    Settings::values.gdbstub_port = gdb_port;
++    Settings::values.use_gdbstub = use_gdbstub;
++    system.ApplySettings();
++
++    // Register frontend applets
++    Frontend::RegisterDefaultApplets(system);
++
++    EmuWindow_SDL2::InitializeSDL2();
++
++    const auto create_emu_window = [&](bool fullscreen,
++                                       bool is_secondary) -> std::unique_ptr<EmuWindow_SDL2> {
++        const auto graphics_api = Settings::values.graphics_api.GetValue();
++        switch (graphics_api) {
++#ifdef ENABLE_OPENGL
++        case Settings::GraphicsAPI::OpenGL:
++            return std::make_unique<EmuWindow_SDL2_GL>(system, fullscreen, is_secondary);
++#endif
++#ifdef ENABLE_VULKAN
++        case Settings::GraphicsAPI::Vulkan:
++            return std::make_unique<EmuWindow_SDL2_VK>(system, fullscreen, is_secondary);
++#endif
++#ifdef ENABLE_SOFTWARE_RENDERER
++        case Settings::GraphicsAPI::Software:
++            return std::make_unique<EmuWindow_SDL2_SW>(system, fullscreen, is_secondary);
++#endif
++        default:
++            LOG_CRITICAL(
++                Frontend,
++                "Unknown or unsupported graphics API {}, falling back to available default",
++                graphics_api);
++#ifdef ENABLE_OPENGL
++            return std::make_unique<EmuWindow_SDL2_GL>(system, fullscreen, is_secondary);
++#elif ENABLE_VULKAN
++            return std::make_unique<EmuWindow_SDL2_VK>(system, fullscreen, is_secondary);
++#elif ENABLE_SOFTWARE_RENDERER
++            return std::make_unique<EmuWindow_SDL2_SW>(system, fullscreen, is_secondary);
++#else
++            // TODO: Add a null renderer backend for this, perhaps.
++#error "At least one renderer must be enabled."
++#endif
++        }
++    };
++
++    const auto emu_window{create_emu_window(fullscreen, false)};
++    const bool use_secondary_window{
++        Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
++        Settings::values.graphics_api.GetValue() != Settings::GraphicsAPI::Software};
++    const auto secondary_window = use_secondary_window ? create_emu_window(false, true) : nullptr;
++
++    const auto scope = emu_window->Acquire();
++
++    LOG_INFO(Frontend, "Azahar Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
++             Common::g_scm_desc);
++    Settings::LogSettings();
++
++    const Core::System::ResultStatus load_result{
++        system.Load(*emu_window, filepath, secondary_window.get())};
++
++    switch (load_result) {
++    case Core::System::ResultStatus::ErrorGetLoader:
++        LOG_CRITICAL(Frontend, "Failed to obtain loader for {}!", filepath);
++        return -1;
++    case Core::System::ResultStatus::ErrorLoader:
++        LOG_CRITICAL(Frontend, "Failed to load ROM!");
++        return -1;
++    case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
++        LOG_CRITICAL(Frontend,
++                     "The application that you are trying to load must be decrypted before "
++                     "being used with Azahar. \n\n For more information on dumping and "
++                     "decrypting applications, please refer to: "
++                     "https://web.archive.org/web/20240304210021/https://citra-emu.org/"
++                     "wiki/dumping-game-cartridges/");
++        return -1;
++    case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
++        LOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
++        return -1;
++    case Core::System::ResultStatus::ErrorNotInitialized:
++        LOG_CRITICAL(Frontend, "CPUCore not initialized");
++        return -1;
++    case Core::System::ResultStatus::ErrorSystemMode:
++        LOG_CRITICAL(Frontend, "Failed to determine system mode!");
++        return -1;
++    case Core::System::ResultStatus::Success:
++        break; // Expected case
++    default:
++        LOG_ERROR(Frontend, "Error while loading ROM: {}", system.GetStatusDetails());
++        break;
++    }
++
++    if (use_multiplayer) {
++        if (auto member = Network::GetRoomMember().lock()) {
++            member->BindOnChatMessageRecieved(OnMessageReceived);
++            member->BindOnStatusMessageReceived(OnStatusMessageReceived);
++            member->BindOnStateChanged(OnStateChanged);
++            member->BindOnError(OnNetworkError);
++            LOG_DEBUG(Network, "Start connection to {}:{} with nickname {}", address, port,
++                      nickname);
++            member->Join(nickname, Service::CFG::GetConsoleIdHash(system), address.c_str(), port, 0,
++                         Network::NoPreferredMac, password);
++        } else {
++            LOG_ERROR(Network, "Could not access RoomMember");
++            return 0;
++        }
++    }
++
++    if (!movie_play.empty()) {
++        auto metadata = movie.GetMovieMetadata(movie_play);
++        LOG_INFO(Movie, "Author: {}", metadata.author);
++        LOG_INFO(Movie, "Rerecord count: {}", metadata.rerecord_count);
++        LOG_INFO(Movie, "Input count: {}", metadata.input_count);
++        movie.StartPlayback(movie_play);
++    }
++    if (!movie_record.empty()) {
++        movie.StartRecording(movie_record, movie_record_author);
++    }
++    if (!dump_video.empty() && DynamicLibrary::FFmpeg::LoadFFmpeg()) {
++        auto& renderer = system.GPU().Renderer();
++        const auto layout{
++            Layout::FrameLayoutFromResolutionScale(renderer.GetResolutionScaleFactor())};
++        auto dumper = std::make_shared<VideoDumper::FFmpegBackend>(renderer);
++        if (dumper->StartDumping(dump_video, layout)) {
++            system.RegisterVideoDumper(dumper);
++        }
++    }
++
++#ifdef __unix__
++    Common::Linux::StartGamemode();
++#endif
++
++    std::thread main_render_thread([&emu_window] { emu_window->Present(); });
++    std::thread secondary_render_thread([&secondary_window] {
++        if (secondary_window) {
++            secondary_window->Present();
++        }
++    });
++
++    u64 program_id{};
++    system.GetAppLoader().ReadProgramId(program_id);
++    system.GPU().ApplyPerProgramSettings(program_id);
++
++    std::atomic_bool stop_run;
++    system.GPU().Renderer().Rasterizer()->LoadDefaultDiskResources(
++        stop_run, [](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total,
++                     const std::string& name) {
++            LOG_DEBUG(Frontend, "Loading stage {} progress {} {} {}", static_cast<u32>(stage),
++                      value, total, name);
++        });
++
++    const auto secondary_is_open = [&secondary_window] {
++        // if the secondary window isn't created, it shouldn't affect the main loop
++        return secondary_window ? secondary_window->IsOpen() : true;
++    };
++    while (emu_window->IsOpen() && secondary_is_open()) {
++        const auto result = system.RunLoop();
++
++        switch (result) {
++        case Core::System::ResultStatus::ShutdownRequested:
++            emu_window->RequestClose();
++            break;
++        case Core::System::ResultStatus::Success:
++            break;
++        default:
++            LOG_ERROR(Frontend, "Error in main run loop: {}", result, system.GetStatusDetails());
++            break;
++        }
++    }
++    emu_window->RequestClose();
++    if (secondary_window) {
++        secondary_window->RequestClose();
++    }
++    main_render_thread.join();
++    secondary_render_thread.join();
++
++    movie.Shutdown();
++
++    auto video_dumper = system.GetVideoDumper();
++    if (video_dumper && video_dumper->IsDumping()) {
++        video_dumper->StopDumping();
++    }
++
++    Network::Shutdown();
++    InputCommon::Shutdown();
++
++    system.Shutdown();
++
++#ifdef __unix__
++    Common::Linux::StopGamemode();
++#endif
++
++    return 0;
++}
+diff --git a/src/citra_sdl/citra_sdl.h b/src/citra_sdl/citra_sdl.h
+new file mode 100644
+index 000000000..9a1a2b6c3
+--- /dev/null
++++ b/src/citra_sdl/citra_sdl.h
+@@ -0,0 +1,7 @@
++// Copyright Citra Emulator Project / Azahar Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++int LaunchSdlFrontend(int argc, char** argv);
+diff --git a/src/citra_sdl/config.cpp b/src/citra_sdl/config.cpp
+new file mode 100644
+index 000000000..a504dd3aa
+--- /dev/null
++++ b/src/citra_sdl/config.cpp
+@@ -0,0 +1,395 @@
++// Copyright Citra Emulator Project / Azahar Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <iomanip>
++#include <memory>
++#include <sstream>
++#include <type_traits>
++#include <INIReader.h>
++#include <SDL.h>
++#include "citra_sdl/config.h"
++#include "citra_sdl/default_ini.h"
++#include "common/file_util.h"
++#include "common/logging/backend.h"
++#include "common/logging/log.h"
++#include "common/settings.h"
++#include "core/hle/service/service.h"
++#include "input_common/main.h"
++#include "input_common/udp/client.h"
++#include "network/network_settings.h"
++
++SdlConfig::SdlConfig() {
++    // TODO: Don't hardcode the path; let the frontend decide where to put the config files.
++    sdl2_config_loc = FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir) + "sdl2-config.ini";
++    sdl2_config = std::make_unique<INIReader>(sdl2_config_loc);
++
++    Reload();
++}
++
++SdlConfig::~SdlConfig() = default;
++
++bool SdlConfig::LoadINI(const std::string& default_contents, bool retry) {
++    const std::string& location = this->sdl2_config_loc;
++    if (sdl2_config->ParseError() < 0) {
++        if (retry) {
++            LOG_WARNING(Config, "Failed to load {}. Creating file from defaults...", location);
++            FileUtil::CreateFullPath(location);
++            FileUtil::WriteStringToFile(true, location, default_contents);
++            sdl2_config = std::make_unique<INIReader>(location); // Reopen file
++
++            return LoadINI(default_contents, false);
++        }
++        LOG_ERROR(Config, "Failed.");
++        return false;
++    }
++    LOG_INFO(Config, "Successfully loaded {}", location);
++    return true;
++}
++
++static const std::array<int, Settings::NativeButton::NumButtons> default_buttons = {
++    SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_T, SDL_SCANCODE_G,
++    SDL_SCANCODE_F, SDL_SCANCODE_H, SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_M, SDL_SCANCODE_N,
++    SDL_SCANCODE_O, SDL_SCANCODE_P, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_B,
++};
++
++static const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> default_analogs{{
++    {
++        SDL_SCANCODE_UP,
++        SDL_SCANCODE_DOWN,
++        SDL_SCANCODE_LEFT,
++        SDL_SCANCODE_RIGHT,
++        SDL_SCANCODE_D,
++    },
++    {
++        SDL_SCANCODE_I,
++        SDL_SCANCODE_K,
++        SDL_SCANCODE_J,
++        SDL_SCANCODE_L,
++        SDL_SCANCODE_D,
++    },
++}};
++
++template <>
++void SdlConfig::ReadSetting(const std::string& group, Settings::Setting<std::string>& setting) {
++    std::string setting_value = sdl2_config->Get(group, setting.GetLabel(), setting.GetDefault());
++    if (setting_value.empty()) {
++        setting_value = setting.GetDefault();
++    }
++    setting = std::move(setting_value);
++}
++
++template <>
++void SdlConfig::ReadSetting(const std::string& group, Settings::Setting<bool>& setting) {
++    setting = sdl2_config->GetBoolean(group, setting.GetLabel(), setting.GetDefault());
++}
++
++template <typename Type, bool ranged>
++void SdlConfig::ReadSetting(const std::string& group, Settings::Setting<Type, ranged>& setting) {
++    if constexpr (std::is_floating_point_v<Type>) {
++        setting = static_cast<Type>(
++            sdl2_config->GetReal(group, setting.GetLabel(), setting.GetDefault()));
++    } else {
++        setting = static_cast<Type>(sdl2_config->GetInteger(
++            group, setting.GetLabel(), static_cast<long>(setting.GetDefault())));
++    }
++}
++
++void SdlConfig::ReadValues() {
++    // Controls
++    // TODO: add multiple input profile support
++    for (int i = 0; i < Settings::NativeButton::NumButtons; ++i) {
++        std::string default_param = InputCommon::GenerateKeyboardParam(default_buttons[i]);
++        Settings::values.current_input_profile.buttons[i] =
++            sdl2_config->GetString("Controls", Settings::NativeButton::mapping[i], default_param);
++        if (Settings::values.current_input_profile.buttons[i].empty())
++            Settings::values.current_input_profile.buttons[i] = default_param;
++    }
++
++    for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; ++i) {
++        std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
++            default_analogs[i][0], default_analogs[i][1], default_analogs[i][2],
++            default_analogs[i][3], default_analogs[i][4], 0.5f);
++        Settings::values.current_input_profile.analogs[i] =
++            sdl2_config->GetString("Controls", Settings::NativeAnalog::mapping[i], default_param);
++        if (Settings::values.current_input_profile.analogs[i].empty())
++            Settings::values.current_input_profile.analogs[i] = default_param;
++    }
++
++    Settings::values.current_input_profile.motion_device = sdl2_config->GetString(
++        "Controls", "motion_device",
++        "engine:motion_emu,update_period:100,sensitivity:0.01,tilt_clamp:90.0");
++    Settings::values.current_input_profile.touch_device =
++        sdl2_config->GetString("Controls", "touch_device", "engine:emu_window");
++    Settings::values.current_input_profile.udp_input_address = sdl2_config->GetString(
++        "Controls", "udp_input_address", InputCommon::CemuhookUDP::DEFAULT_ADDR);
++    Settings::values.current_input_profile.udp_input_port =
++        static_cast<u16>(sdl2_config->GetInteger("Controls", "udp_input_port",
++                                                 InputCommon::CemuhookUDP::DEFAULT_PORT));
++    ReadSetting("Controls", Settings::values.use_artic_base_controller);
++
++    // Core
++    ReadSetting("Core", Settings::values.use_cpu_jit);
++    ReadSetting("Core", Settings::values.cpu_clock_percentage);
++
++    // Renderer
++    ReadSetting("Renderer", Settings::values.graphics_api);
++    ReadSetting("Renderer", Settings::values.physical_device);
++    ReadSetting("Renderer", Settings::values.spirv_shader_gen);
++    ReadSetting("Renderer", Settings::values.async_shader_compilation);
++    ReadSetting("Renderer", Settings::values.async_presentation);
++    ReadSetting("Renderer", Settings::values.use_gles);
++    ReadSetting("Renderer", Settings::values.use_hw_shader);
++    ReadSetting("Renderer", Settings::values.shaders_accurate_mul);
++    ReadSetting("Renderer", Settings::values.use_shader_jit);
++    ReadSetting("Renderer", Settings::values.resolution_factor);
++    ReadSetting("Renderer", Settings::values.use_disk_shader_cache);
++    ReadSetting("Renderer", Settings::values.frame_limit);
++    ReadSetting("Renderer", Settings::values.use_vsync);
++    ReadSetting("Renderer", Settings::values.texture_filter);
++    ReadSetting("Renderer", Settings::values.texture_sampling);
++    ReadSetting("Renderer", Settings::values.delay_game_render_thread_us);
++
++    ReadSetting("Renderer", Settings::values.mono_render_option);
++    ReadSetting("Renderer", Settings::values.render_3d);
++    ReadSetting("Renderer", Settings::values.factor_3d);
++    ReadSetting("Renderer", Settings::values.pp_shader_name);
++    ReadSetting("Renderer", Settings::values.anaglyph_shader_name);
++    ReadSetting("Renderer", Settings::values.filter_mode);
++
++    ReadSetting("Renderer", Settings::values.bg_red);
++    ReadSetting("Renderer", Settings::values.bg_green);
++    ReadSetting("Renderer", Settings::values.bg_blue);
++    ReadSetting("Renderer", Settings::values.disable_right_eye_render);
++
++    // Layout
++    ReadSetting("Layout", Settings::values.layout_option);
++    ReadSetting("Layout", Settings::values.swap_screen);
++    ReadSetting("Layout", Settings::values.upright_screen);
++    ReadSetting("Layout", Settings::values.large_screen_proportion);
++    ReadSetting("Layout", Settings::values.custom_top_x);
++    ReadSetting("Layout", Settings::values.custom_top_y);
++    ReadSetting("Layout", Settings::values.custom_top_width);
++    ReadSetting("Layout", Settings::values.custom_top_height);
++    ReadSetting("Layout", Settings::values.custom_bottom_x);
++    ReadSetting("Layout", Settings::values.custom_bottom_y);
++    ReadSetting("Layout", Settings::values.custom_bottom_width);
++    ReadSetting("Layout", Settings::values.custom_bottom_height);
++    ReadSetting("Layout", Settings::values.custom_second_layer_opacity);
++
++    ReadSetting("Layout", Settings::values.screen_top_stretch);
++    ReadSetting("Layout", Settings::values.screen_top_leftright_padding);
++    ReadSetting("Layout", Settings::values.screen_top_topbottom_padding);
++    ReadSetting("Layout", Settings::values.screen_bottom_stretch);
++    ReadSetting("Layout", Settings::values.screen_bottom_leftright_padding);
++    ReadSetting("Layout", Settings::values.screen_bottom_topbottom_padding);
++
++    ReadSetting("Layout", Settings::values.portrait_layout_option);
++    ReadSetting("Layout", Settings::values.custom_portrait_top_x);
++    ReadSetting("Layout", Settings::values.custom_portrait_top_y);
++    ReadSetting("Layout", Settings::values.custom_portrait_top_width);
++    ReadSetting("Layout", Settings::values.custom_portrait_top_height);
++    ReadSetting("Layout", Settings::values.custom_portrait_bottom_x);
++    ReadSetting("Layout", Settings::values.custom_portrait_bottom_y);
++    ReadSetting("Layout", Settings::values.custom_portrait_bottom_width);
++    ReadSetting("Layout", Settings::values.custom_portrait_bottom_height);
++
++    // Utility
++    ReadSetting("Utility", Settings::values.dump_textures);
++    ReadSetting("Utility", Settings::values.custom_textures);
++    ReadSetting("Utility", Settings::values.preload_textures);
++    ReadSetting("Utility", Settings::values.async_custom_loading);
++
++    // Audio
++    ReadSetting("Audio", Settings::values.audio_emulation);
++    ReadSetting("Audio", Settings::values.enable_audio_stretching);
++    ReadSetting("Audio", Settings::values.enable_realtime_audio);
++    ReadSetting("Audio", Settings::values.volume);
++    ReadSetting("Audio", Settings::values.output_type);
++    ReadSetting("Audio", Settings::values.output_device);
++    ReadSetting("Audio", Settings::values.input_type);
++    ReadSetting("Audio", Settings::values.input_device);
++
++    // Data Storage
++    ReadSetting("Data Storage", Settings::values.use_virtual_sd);
++    ReadSetting("Data Storage", Settings::values.use_custom_storage);
++    ReadSetting("Data Storage", Settings::values.compress_cia_installs);
++
++    if (Settings::values.use_custom_storage) {
++        FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir,
++                                 sdl2_config->GetString("Data Storage", "nand_directory", ""));
++        FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir,
++                                 sdl2_config->GetString("Data Storage", "sdmc_directory", ""));
++    }
++
++    // System
++    ReadSetting("System", Settings::values.is_new_3ds);
++    ReadSetting("System", Settings::values.lle_applets);
++    ReadSetting("System", Settings::values.enable_required_online_lle_modules);
++    ReadSetting("System", Settings::values.region_value);
++    ReadSetting("System", Settings::values.init_clock);
++    {
++        std::tm t;
++        t.tm_sec = 1;
++        t.tm_min = 0;
++        t.tm_hour = 0;
++        t.tm_mday = 1;
++        t.tm_mon = 0;
++        t.tm_year = 100;
++        t.tm_isdst = 0;
++        std::istringstream string_stream(
++            sdl2_config->GetString("System", "init_time", "2000-01-01 00:00:01"));
++        string_stream >> std::get_time(&t, "%Y-%m-%d %H:%M:%S");
++        if (string_stream.fail()) {
++            LOG_ERROR(Config, "Failed To parse init_time. Using 2000-01-01 00:00:01");
++        }
++        Settings::values.init_time =
++            std::chrono::duration_cast<std::chrono::seconds>(
++                std::chrono::system_clock::from_time_t(std::mktime(&t)).time_since_epoch())
++                .count();
++    }
++    ReadSetting("System", Settings::values.init_ticks_type);
++    ReadSetting("System", Settings::values.init_ticks_override);
++    ReadSetting("System", Settings::values.plugin_loader_enabled);
++    ReadSetting("System", Settings::values.allow_plugin_loader);
++    ReadSetting("System", Settings::values.steps_per_hour);
++    ReadSetting("System", Settings::values.apply_region_free_patch);
++
++    {
++        constexpr const char* default_init_time_offset = "0 00:00:00";
++
++        std::string offset_string =
++            sdl2_config->GetString("System", "init_time_offset", default_init_time_offset);
++
++        std::size_t sep_index = offset_string.find(' ');
++
++        if (sep_index == std::string::npos) {
++            LOG_ERROR(Config, "Failed to parse init_time_offset. Using 0 00:00:00");
++            offset_string = default_init_time_offset;
++
++            sep_index = offset_string.find(' ');
++        }
++
++        std::string day_string = offset_string.substr(0, sep_index);
++        long long days = 0;
++
++        try {
++            days = std::stoll(day_string);
++        } catch (std::logic_error&) {
++            LOG_ERROR(Config, "Failed to parse days in init_time_offset. Using 0");
++            days = 0;
++        }
++
++        long long days_in_seconds = days * 86400;
++
++        std::tm t;
++        t.tm_sec = 0;
++        t.tm_min = 0;
++        t.tm_hour = 0;
++        t.tm_mday = 1;
++        t.tm_mon = 0;
++        t.tm_year = 100;
++        t.tm_isdst = 0;
++
++        std::istringstream string_stream(offset_string.substr(sep_index + 1));
++        string_stream >> std::get_time(&t, "%H:%M:%S");
++
++        if (string_stream.fail()) {
++            LOG_ERROR(Config,
++                      "Failed to parse hours, minutes and seconds in init_time_offset. 00:00:00");
++        }
++
++        auto time_offset =
++            std::chrono::system_clock::from_time_t(std::mktime(&t)).time_since_epoch();
++
++        auto secs = std::chrono::duration_cast<std::chrono::seconds>(time_offset).count();
++
++        Settings::values.init_time_offset = static_cast<long long>(secs) + days_in_seconds;
++    }
++
++    // Camera
++    using namespace Service::CAM;
++    Settings::values.camera_name[OuterRightCamera] =
++        sdl2_config->GetString("Camera", "camera_outer_right_name", "blank");
++    Settings::values.camera_config[OuterRightCamera] =
++        sdl2_config->GetString("Camera", "camera_outer_right_config", "");
++    Settings::values.camera_flip[OuterRightCamera] =
++        sdl2_config->GetInteger("Camera", "camera_outer_right_flip", 0);
++    Settings::values.camera_name[InnerCamera] =
++        sdl2_config->GetString("Camera", "camera_inner_name", "blank");
++    Settings::values.camera_config[InnerCamera] =
++        sdl2_config->GetString("Camera", "camera_inner_config", "");
++    Settings::values.camera_flip[InnerCamera] =
++        sdl2_config->GetInteger("Camera", "camera_inner_flip", 0);
++    Settings::values.camera_name[OuterLeftCamera] =
++        sdl2_config->GetString("Camera", "camera_outer_left_name", "blank");
++    Settings::values.camera_config[OuterLeftCamera] =
++        sdl2_config->GetString("Camera", "camera_outer_left_config", "");
++    Settings::values.camera_flip[OuterLeftCamera] =
++        sdl2_config->GetInteger("Camera", "camera_outer_left_flip", 0);
++
++    // Miscellaneous
++    ReadSetting("Miscellaneous", Settings::values.log_filter);
++    ReadSetting("Miscellaneous", Settings::values.log_regex_filter);
++    ReadSetting("Miscellaneous", Settings::values.delay_start_for_lle_modules);
++    ReadSetting("Miscellaneous", Settings::values.deterministic_async_operations);
++
++    // Apply the log_filter setting as the logger has already been initialized
++    // and doesn't pick up the filter on its own.
++    Common::Log::Filter filter;
++    filter.ParseFilterString(Settings::values.log_filter.GetValue());
++    Common::Log::SetGlobalFilter(filter);
++    Common::Log::SetRegexFilter(Settings::values.log_regex_filter.GetValue());
++
++    // Debugging
++    Settings::values.record_frame_times =
++        sdl2_config->GetBoolean("Debugging", "record_frame_times", false);
++    ReadSetting("Debugging", Settings::values.renderer_debug);
++    ReadSetting("Debugging", Settings::values.use_gdbstub);
++    ReadSetting("Debugging", Settings::values.gdbstub_port);
++    ReadSetting("Debugging", Settings::values.instant_debug_log);
++    ReadSetting("Debugging", Settings::values.enable_rpc_server);
++
++    for (const auto& service_module : Service::service_module_map) {
++        bool use_lle = sdl2_config->GetBoolean("Debugging", "LLE\\" + service_module.name, false);
++        Settings::values.lle_modules.emplace(service_module.name, use_lle);
++    }
++
++    // Web Service
++    NetSettings::values.web_api_url =
++        sdl2_config->GetString("WebService", "web_api_url", "https://api.citra-emu.org");
++    NetSettings::values.citra_username = sdl2_config->GetString("WebService", "citra_username", "");
++    NetSettings::values.citra_token = sdl2_config->GetString("WebService", "citra_token", "");
++
++    // Video Dumping
++    Settings::values.output_format =
++        sdl2_config->GetString("Video Dumping", "output_format", "webm");
++    Settings::values.format_options = sdl2_config->GetString("Video Dumping", "format_options", "");
++
++    Settings::values.video_encoder =
++        sdl2_config->GetString("Video Dumping", "video_encoder", "libvpx-vp9");
++
++    // Options for variable bit rate live streaming taken from here:
++    // https://developers.google.com/media/vp9/live-encoding
++    std::string default_video_options;
++    if (Settings::values.video_encoder == "libvpx-vp9") {
++        default_video_options =
++            "quality:realtime,speed:6,tile-columns:4,frame-parallel:1,threads:8,row-mt:1";
++    }
++    Settings::values.video_encoder_options =
++        sdl2_config->GetString("Video Dumping", "video_encoder_options", default_video_options);
++    Settings::values.video_bitrate =
++        sdl2_config->GetInteger("Video Dumping", "video_bitrate", 2500000);
++
++    Settings::values.audio_encoder =
++        sdl2_config->GetString("Video Dumping", "audio_encoder", "libvorbis");
++    Settings::values.audio_encoder_options =
++        sdl2_config->GetString("Video Dumping", "audio_encoder_options", "");
++    Settings::values.audio_bitrate =
++        sdl2_config->GetInteger("Video Dumping", "audio_bitrate", 64000);
++}
++
++void SdlConfig::Reload() {
++    LoadINI(DefaultINI::sdl2_config_file);
++    ReadValues();
++}
+diff --git a/src/citra_sdl/config.h b/src/citra_sdl/config.h
+new file mode 100644
+index 000000000..d7c3e6c80
+--- /dev/null
++++ b/src/citra_sdl/config.h
+@@ -0,0 +1,35 @@
++// Copyright 2014 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include <memory>
++#include <string>
++#include "common/settings.h"
++
++class INIReader;
++
++class SdlConfig {
++    std::unique_ptr<INIReader> sdl2_config;
++    std::string sdl2_config_loc;
++
++    bool LoadINI(const std::string& default_contents = "", bool retry = true);
++    void ReadValues();
++
++public:
++    SdlConfig();
++    ~SdlConfig();
++
++    void Reload();
++
++private:
++    /**
++     * Applies a value read from the sdl2_config to a Setting.
++     *
++     * @param group The name of the INI group
++     * @param setting The yuzu setting to modify
++     */
++    template <typename Type, bool ranged>
++    void ReadSetting(const std::string& group, Settings::Setting<Type, ranged>& setting);
++};
+diff --git a/src/citra_sdl/default_ini.h b/src/citra_sdl/default_ini.h
+new file mode 100644
+index 000000000..4c97dbb89
+--- /dev/null
++++ b/src/citra_sdl/default_ini.h
+@@ -0,0 +1,405 @@
++// Copyright Citra Emulator Project / Azahar Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++namespace DefaultINI {
++
++const char* sdl2_config_file = R"(
++[Controls]
++# The input devices and parameters for each 3DS native input
++# It should be in the format of "engine:[engine_name],[param1]:[value1],[param2]:[value2]..."
++# Escape characters $0 (for ':'), $1 (for ',') and $2 (for '$') can be used in values
++
++# for button input, the following devices are available:
++#  - "keyboard" (default) for keyboard input. Required parameters:
++#      - "code": the code of the key to bind
++#  - "sdl" for joystick input using SDL. Required parameters:
++#      - "joystick": the index of the joystick to bind
++#      - "button"(optional): the index of the button to bind
++#      - "hat"(optional): the index of the hat to bind as direction buttons
++#      - "axis"(optional): the index of the axis to bind
++#      - "direction"(only used for hat): the direction name of the hat to bind. Can be "up", "down", "left" or "right"
++#      - "threshold"(only used for axis): a float value in (-1.0, 1.0) which the button is
++#          triggered if the axis value crosses
++#      - "direction"(only used for axis): "+" means the button is triggered when the axis value
++#          is greater than the threshold; "-" means the button is triggered when the axis value
++#          is smaller than the threshold
++button_a=
++button_b=
++button_x=
++button_y=
++button_up=
++button_down=
++button_left=
++button_right=
++button_l=
++button_r=
++button_start=
++button_select=
++button_debug=
++button_gpio14=
++button_zl=
++button_zr=
++button_home=
++
++# for analog input, the following devices are available:
++#  - "analog_from_button" (default) for emulating analog input from direction buttons. Required parameters:
++#      - "up", "down", "left", "right": sub-devices for each direction.
++#          Should be in the format as a button input devices using escape characters, for example, "engine$0keyboard$1code$00"
++#      - "modifier": sub-devices as a modifier.
++#      - "modifier_scale": a float number representing the applied modifier scale to the analog input.
++#          Must be in range of 0.0-1.0. Defaults to 0.5
++#  - "sdl" for joystick input using SDL. Required parameters:
++#      - "joystick": the index of the joystick to bind
++#      - "axis_x": the index of the axis to bind as x-axis (default to 0)
++#      - "axis_y": the index of the axis to bind as y-axis (default to 1)
++circle_pad=
++c_stick=
++
++# for motion input, the following devices are available:
++#  - "motion_emu" (default) for emulating motion input from mouse input. Required parameters:
++#      - "update_period": update period in milliseconds (default to 100)
++#      - "sensitivity": the coefficient converting mouse movement to tilting angle (default to 0.01)
++#      - "tilt_clamp": the max value of the tilt angle in degrees (default to 90)
++#  - "cemuhookudp" reads motion input from a udp server that uses cemuhook's udp protocol
++motion_device=
++
++# for touch input, the following devices are available:
++#  - "emu_window" (default) for emulating touch input from mouse input to the emulation window. No parameters required
++#  - "cemuhookudp" reads touch input from a udp server that uses cemuhook's udp protocol
++#      - "min_x", "min_y", "max_x", "max_y": defines the udp device's touch screen coordinate system
++touch_device=
++
++# Most desktop operating systems do not expose a way to poll the motion state of the controllers
++# so as a way around it, cemuhook created a udp client/server protocol to broadcast the data directly
++# from a controller device to the client program. Citra has a client that can connect and read
++# from any cemuhook compatible motion program.
++
++# IPv4 address of the udp input server (Default "127.0.0.1")
++udp_input_address=
++
++# Port of the udp input server. (Default 26760)
++udp_input_port=
++
++# The pad to request data on. Should be between 0 (Pad 1) and 3 (Pad 4). (Default 0)
++udp_pad_index=
++
++[Core]
++# Whether to use the Just-In-Time (JIT) compiler for CPU emulation
++# 0: Interpreter (slow), 1 (default): JIT (fast)
++use_cpu_jit =
++
++# Change the Clock Frequency of the emulated 3DS CPU.
++# Underclocking can increase the performance of the game at the risk of freezing.
++# Overclocking may fix lag that happens on console, but also comes with the risk of freezing.
++# Range is any positive integer (but we suspect 25 - 400 is a good idea) Default is 100
++cpu_clock_percentage =
++
++[Renderer]
++# Whether to render using OpenGL or Software
++# 0: Software, 1: OpenGL (default), 2: Vulkan
++graphics_api =
++
++# Whether to render using GLES or OpenGL
++# 0 (default): OpenGL, 1: GLES
++use_gles =
++
++# Whether to use hardware shaders to emulate 3DS shaders
++# 0: Software, 1 (default): Hardware
++use_hw_shader =
++
++# Whether to use accurate multiplication in hardware shaders
++# 0: Off (Faster, but causes issues in some games) 1: On (Default. Slower, but correct)
++shaders_accurate_mul =
++
++# Whether to use the Just-In-Time (JIT) compiler for shader emulation
++# 0: Interpreter (slow), 1 (default): JIT (fast)
++use_shader_jit =
++
++# Forces VSync on the display thread. Usually doesn't impact performance, but on some drivers it can
++# so only turn this off if you notice a speed difference.
++# 0: Off, 1 (default): On
++use_vsync =
++
++# Reduce stuttering by storing and loading generated shaders to disk
++# 0: Off, 1 (default. On)
++use_disk_shader_cache =
++
++# Resolution scale factor
++# 0: Auto (scales resolution to window size), 1: Native 3DS screen resolution, Otherwise a scale
++# factor for the 3DS resolution
++resolution_factor =
++
++# Texture filter
++# 0: None, 1: Anime4K, 2: Bicubic, 3: Nearest Neighbor, 4: ScaleForce, 5: xBRZ
++texture_filter =
++
++# Limits the speed of the game to run no faster than this value as a percentage of target speed.
++# Will not have an effect if unthrottled is enabled.
++# 5 - 995: Speed limit as a percentage of target game speed. 0 for unthrottled. 100 (default)
++frame_limit =
++
++# Overrides the frame limiter to use frame_limit_alternate instead of frame_limit.
++# 0: Off (default), 1: On
++use_frame_limit_alternate =
++
++# Alternate speed limit to be used instead of frame_limit if use_frame_limit_alternate is enabled
++# 5 - 995: Speed limit as a percentage of target game speed. 0 for unthrottled. 200 (default)
++frame_limit_alternate =
++
++# The clear color for the renderer. What shows up on the sides of the bottom screen.
++# Must be in range of 0.0-1.0. Defaults to 0.0 for all.
++bg_red =
++bg_blue =
++bg_green =
++
++# Whether and how Stereoscopic 3D should be rendered
++# 0 (default): Off, 1: Side by Side, 2: Reverse Side by Side, 3: Anaglyph, 4: Interlaced, 5: Reverse Interlaced
++render_3d =
++
++# Change 3D Intensity
++# 0 - 100: Intensity. 0 (default)
++factor_3d =
++
++# Swap Eyes in 3D
++# true or false (default)
++swap_eyes_3d =
++
++# Change Default Eye to Render When in Monoscopic Mode
++# 0 (default): Left, 1: Right
++mono_render_option =
++
++# The name of the post processing shader to apply.
++# Loaded from shaders if render_3d is off or side by side.
++pp_shader_name =
++
++# The name of the shader to apply when render_3d is anaglyph.
++# Loaded from shaders/anaglyph
++anaglyph_shader_name =
++
++# Whether to enable linear filtering or not
++# This is required for some shaders to work correctly
++# 0: Nearest, 1 (default): Linear
++filter_mode =
++
++[Layout]
++# Layout for the screen inside the render window.
++# 0 (default): Default Above/Below Screen
++# 1: Single Screen Only
++# 2: Large Screen Small Screen
++# 3: Side by Side
++# 4: Separate Windows
++# 5: Hybrid Screen
++# 6: Custom Layout
++layout_option =
++
++# Screen placement when using Custom layout option
++# 0x, 0y is the top left corner of the render window.
++custom_top_x =
++custom_top_y =
++custom_top_width =
++custom_top_height =
++custom_bottom_x =
++custom_bottom_y =
++custom_bottom_width =
++custom_bottom_height =
++
++# Opacity of second layer when using custom layout option (bottom screen unless swapped)
++custom_second_layer_opacity =
++
++# Swaps the prominent screen with the other screen.
++# For example, if Single Screen is chosen, setting this to 1 will display the bottom screen instead of the top screen.
++# 0 (default): Top Screen is prominent, 1: Bottom Screen is prominent
++swap_screen =
++
++# Toggle upright orientation, for book style games.
++# 0 (default): Off, 1: On
++upright_screen =
++
++# The proportion between the large and small screens when playing in Large Screen Small Screen layout.
++# Must be a real value between 1.0 and 16.0. Default is 4
++large_screen_proportion =
++
++# Dumps textures as PNG to dump/textures/[Title ID]/.
++# 0 (default): Off, 1: On
++dump_textures =
++
++# Reads PNG files from load/textures/[Title ID]/ and replaces textures.
++# 0 (default): Off, 1: On
++custom_textures =
++
++# Loads all custom textures into memory before booting.
++# 0 (default): Off, 1: On
++preload_textures =
++
++# Loads custom textures asynchronously with background threads.
++# 0: Off, 1 (default): On
++async_custom_loading =
++
++[Audio]
++# Whether or not to enable DSP LLE
++# 0 (default): No, 1: Yes
++enable_dsp_lle =
++
++# Whether or not to run DSP LLE on a different thread
++# 0 (default): No, 1: Yes
++enable_dsp_lle_thread =
++
++# Whether or not to enable the audio-stretching post-processing effect.
++# This effect adjusts audio speed to match emulation speed and helps prevent audio stutter,
++# at the cost of increasing audio latency.
++# 0: No, 1 (default): Yes
++enable_audio_stretching =
++
++# Scales audio playback speed to account for drops in emulation framerate
++# 0 (default): No, 1: Yes
++enable_realtime_audio =
++
++# Output volume.
++# 1.0 (default): 100%, 0.0; mute
++volume =
++
++# Which audio output type to use.
++# 0 (default): Auto-select, 1: No audio output, 2: Cubeb (if available), 3: OpenAL (if available), 4: SDL2 (if available)
++output_type =
++
++# Which audio output device to use.
++# auto (default): Auto-select
++output_device =
++
++# Which audio input type to use.
++# 0 (default): Auto-select, 1: No audio input, 2: Static noise, 3: Cubeb (if available), 4: OpenAL (if available)
++input_type =
++
++# Which audio input device to use.
++# auto (default): Auto-select
++input_device =
++
++[Data Storage]
++# Whether to create a virtual SD card.
++# 1 (default): Yes, 0: No
++use_virtual_sd =
++
++# Whether to use custom storage locations
++# 1: Yes, 0 (default): No
++use_custom_storage =
++
++# The path of the virtual SD card directory.
++# empty (default) will use the user_path
++sdmc_directory =
++
++# The path of NAND directory.
++# empty (default) will use the user_path
++nand_directory =
++
++[System]
++# The system model that Citra will try to emulate
++# 0: Old 3DS, 1: New 3DS (default)
++is_new_3ds =
++
++# Whether to use LLE system applets, if installed
++# 0 (default): No, 1: Yes
++lle_applets =
++
++# The system region that Citra will use during emulation
++# -1: Auto-select (default), 0: Japan, 1: USA, 2: Europe, 3: Australia, 4: China, 5: Korea, 6: Taiwan
++region_value =
++
++# The clock to use when citra starts
++# 0: System clock (default), 1: fixed time
++init_clock =
++
++# Time used when init_clock is set to fixed_time in the format %Y-%m-%d %H:%M:%S
++# set to fixed time. Default 2000-01-01 00:00:01
++# Note: 3DS can only handle times later then Jan 1 2000
++init_time =
++
++# The system ticks count to use when citra starts
++# 0: Random (default), 1: Fixed
++init_ticks_type =
++
++# Tick count to use when init_ticks_type is set to Fixed.
++# Defaults to 0.
++init_ticks_override =
++
++# Number of steps per hour reported by the pedometer. Range from 0 to 65,535.
++# Defaults to 0.
++steps_per_hour =
++
++[Camera]
++# Which camera engine to use for the right outer camera
++# blank (default): a dummy camera that always returns black image
++camera_outer_right_name =
++
++# A config string for the right outer camera. Its meaning is defined by the camera engine
++camera_outer_right_config =
++
++# The image flip to apply
++# 0: None (default), 1: Horizontal, 2: Vertical, 3: Reverse
++camera_outer_right_flip =
++
++# ... for the left outer camera
++camera_outer_left_name =
++camera_outer_left_config =
++camera_outer_left_flip =
++
++# ... for the inner camera
++camera_inner_name =
++camera_inner_config =
++camera_inner_flip =
++
++[Miscellaneous]
++# A filter which removes logs below a certain logging level.
++# Examples: *:Debug Kernel.SVC:Trace Service.*:Critical
++log_filter = *:Info
++
++[Debugging]
++# Record frame time data, can be found in the log directory. Boolean value
++record_frame_times =
++
++# Port for listening to GDB connections.
++use_gdbstub=false
++gdbstub_port=24689
++
++# Whether to enable additional debugging information during emulation
++# 0 (default): Off, 1: On
++renderer_debug =
++
++# To LLE a service module add "LLE\<module name>=true"
++
++[WebService]
++# URL for Web API
++web_api_url =
++# Username and token for Citra Web Service
++citra_username =
++citra_token =
++
++[Video Dumping]
++# Format of the video to output, default: webm
++output_format =
++
++# Options passed to the muxer (optional)
++# This is a param package, format: [key1]:[value1],[key2]:[value2],...
++format_options =
++
++# Video encoder used, default: libvpx-vp9
++video_encoder =
++
++# Options passed to the video codec (optional)
++video_encoder_options =
++
++# Video bitrate, default: 2500000
++video_bitrate =
++
++# Audio encoder used, default: libvorbis
++audio_encoder =
++
++# Options passed to the audio codec (optional)
++audio_encoder_options =
++
++# Audio bitrate, default: 64000
++audio_bitrate =
++)";
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2.cpp b/src/citra_sdl/emu_window/emu_window_sdl2.cpp
+new file mode 100644
+index 000000000..24f3ba7e6
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2.cpp
+@@ -0,0 +1,319 @@
++// Copyright 2016 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <algorithm>
++#include <cstdlib>
++#include <string>
++#define SDL_MAIN_HANDLED
++#include <SDL.h>
++#include "citra_sdl/emu_window/emu_window_sdl2.h"
++#include "common/logging/log.h"
++#include "common/scm_rev.h"
++#include "common/settings.h"
++#include "core/core.h"
++#include "input_common/keyboard.h"
++#include "input_common/main.h"
++#include "input_common/motion_emu.h"
++#include "network/network.h"
++
++void EmuWindow_SDL2::OnMouseMotion(s32 x, s32 y) {
++    TouchMoved((unsigned)std::max(x, 0), (unsigned)std::max(y, 0));
++    InputCommon::GetMotionEmu()->Tilt(x, y);
++}
++
++void EmuWindow_SDL2::OnMouseButton(u32 button, u8 state, s32 x, s32 y) {
++    if (button == SDL_BUTTON_LEFT) {
++        if (state == SDL_PRESSED) {
++            TouchPressed((unsigned)std::max(x, 0), (unsigned)std::max(y, 0));
++        } else {
++            TouchReleased();
++        }
++    } else if (button == SDL_BUTTON_RIGHT) {
++        if (state == SDL_PRESSED) {
++            InputCommon::GetMotionEmu()->BeginTilt(x, y);
++        } else {
++            InputCommon::GetMotionEmu()->EndTilt();
++        }
++    }
++}
++
++std::pair<unsigned, unsigned> EmuWindow_SDL2::TouchToPixelPos(float touch_x, float touch_y) const {
++    int w, h;
++    SDL_GetWindowSize(render_window, &w, &h);
++
++    touch_x *= w;
++    touch_y *= h;
++
++    return {static_cast<unsigned>(std::max(std::round(touch_x), 0.0f)),
++            static_cast<unsigned>(std::max(std::round(touch_y), 0.0f))};
++}
++
++void EmuWindow_SDL2::OnFingerDown(float x, float y) {
++    // TODO(NeatNit): keep track of multitouch using the fingerID and a dictionary of some kind
++    // This isn't critical because the best we can do when we have that is to average them, like the
++    // 3DS does
++
++    const auto [px, py] = TouchToPixelPos(x, y);
++    TouchPressed(px, py);
++}
++
++void EmuWindow_SDL2::OnFingerMotion(float x, float y) {
++    const auto [px, py] = TouchToPixelPos(x, y);
++    TouchMoved(px, py);
++}
++
++void EmuWindow_SDL2::OnFingerUp() {
++    TouchReleased();
++}
++
++void EmuWindow_SDL2::OnKeyEvent(int key, u8 state) {
++    if (state == SDL_PRESSED) {
++        InputCommon::GetKeyboard()->PressKey(key);
++    } else if (state == SDL_RELEASED) {
++        InputCommon::GetKeyboard()->ReleaseKey(key);
++    }
++}
++
++bool EmuWindow_SDL2::IsOpen() const {
++    return is_open;
++}
++
++void EmuWindow_SDL2::RequestClose() {
++    is_open = false;
++}
++
++void EmuWindow_SDL2::OnResize() {
++    int width, height;
++    SDL_GL_GetDrawableSize(render_window, &width, &height);
++    UpdateCurrentFramebufferLayout(width, height);
++}
++
++void EmuWindow_SDL2::Fullscreen() {
++    if (SDL_SetWindowFullscreen(render_window, SDL_WINDOW_FULLSCREEN) == 0) {
++        return;
++    }
++
++    LOG_ERROR(Frontend, "Fullscreening failed: {}", SDL_GetError());
++
++    // Try a different fullscreening method
++    LOG_INFO(Frontend, "Attempting to use borderless fullscreen...");
++    if (SDL_SetWindowFullscreen(render_window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0) {
++        return;
++    }
++
++    LOG_ERROR(Frontend, "Borderless fullscreening failed: {}", SDL_GetError());
++
++    // Fallback algorithm: Maximise window.
++    // Works on all systems (unless something is seriously wrong), so no fallback for this one.
++    LOG_INFO(Frontend, "Falling back on a maximised window...");
++    SDL_MaximizeWindow(render_window);
++}
++
++EmuWindow_SDL2::EmuWindow_SDL2(Core::System& system_, bool is_secondary)
++    : EmuWindow(is_secondary), system(system_) {
++    // Layout-cycle hotkey: raw joystick button indices. Defaults match the RG-Vita-Pro joypad
++    // (Select=b8, R=b5). Override via env so muOS can derive them from the active controller
++    // profile (e.g. tok back=bN -> AZAHAR_HOTKEY_MOD=N; rightshoulder=bM -> AZAHAR_HOTKEY_LAYOUT=M).
++    if (const char* m = std::getenv("AZAHAR_HOTKEY_MOD")) {
++        hotkey_mod_button = std::atoi(m);
++    }
++    if (const char* l = std::getenv("AZAHAR_HOTKEY_LAYOUT")) {
++        hotkey_layout_button = std::atoi(l);
++    }
++    if (const char* s = std::getenv("AZAHAR_HOTKEY_SWAP")) {
++        hotkey_swap_button = std::atoi(s);
++    }
++    if (const char* e = std::getenv("AZAHAR_HOTKEY_EXIT")) {
++        hotkey_exit_button = std::atoi(e);
++    }
++}
++
++void EmuWindow_SDL2::OnGamepadButton(u32 button, u8 state) {
++    if (hotkey_mod_button < 0) {
++        return;  // hotkeys disabled (no modifier configured)
++    }
++    const int b = static_cast<int>(button);
++
++    // Track the modifier button.
++    if (b == hotkey_mod_button) {
++        hotkey_mod_held = (state == SDL_PRESSED);
++        return;
++    }
++
++    // Action buttons fire on press while the modifier is held.
++    if (state != SDL_PRESSED || !hotkey_mod_held) {
++        return;
++    }
++
++    if (hotkey_layout_button >= 0 && b == hotkey_layout_button) {
++        // Cycle through safe layouts; skip SeparateWindows (4) and CustomLayout (6).
++        static constexpr u32 kLayouts[] = {0, 1, 2, 3, 5};
++        constexpr u32 kN = 5;
++        const u32 cur = static_cast<u32>(Settings::values.layout_option.GetValue());
++        u32 next_idx = 0;
++        for (u32 i = 0; i < kN; ++i) {
++            if (kLayouts[i] == cur) {
++                next_idx = (i + 1) % kN;
++                break;
++            }
++        }
++        const auto next = static_cast<Settings::LayoutOption>(kLayouts[next_idx]);
++        Settings::values.layout_option = next;
++        LOG_INFO(Frontend, "Hotkey: layout cycled to {}", static_cast<u32>(next));
++        OnResize();
++    } else if (hotkey_swap_button >= 0 && b == hotkey_swap_button) {
++        const bool next = !Settings::values.swap_screen.GetValue();
++        Settings::values.swap_screen = next;
++        LOG_INFO(Frontend, "Hotkey: swap_screen -> {}", next);
++        OnResize();
++    } else if (hotkey_exit_button >= 0 && b == hotkey_exit_button) {
++        LOG_INFO(Frontend, "Hotkey: exit requested");
++        RequestClose();
++    }
++}
++
++EmuWindow_SDL2::~EmuWindow_SDL2() {
++    SDL_Quit();
++}
++
++void EmuWindow_SDL2::InitializeSDL2() {
++    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) {
++        LOG_CRITICAL(Frontend, "Failed to initialize SDL2: {}! Exiting...", SDL_GetError());
++        exit(1);
++    }
++
++    InputCommon::Init();
++    Network::Init();
++
++    SDL_SetMainReady();
++}
++
++u32 EmuWindow_SDL2::GetEventWindowId(const SDL_Event& event) const {
++    switch (event.type) {
++    case SDL_WINDOWEVENT:
++        return event.window.windowID;
++    case SDL_KEYDOWN:
++    case SDL_KEYUP:
++        return event.key.windowID;
++    case SDL_MOUSEMOTION:
++        return event.motion.windowID;
++    case SDL_MOUSEBUTTONDOWN:
++    case SDL_MOUSEBUTTONUP:
++        return event.button.windowID;
++    case SDL_MOUSEWHEEL:
++        return event.wheel.windowID;
++    case SDL_FINGERDOWN:
++    case SDL_FINGERMOTION:
++    case SDL_FINGERUP:
++        return event.tfinger.windowID;
++    case SDL_TEXTEDITING:
++        return event.edit.windowID;
++    case SDL_TEXTEDITING_EXT:
++        return event.editExt.windowID;
++    case SDL_TEXTINPUT:
++        return event.text.windowID;
++    case SDL_DROPBEGIN:
++    case SDL_DROPFILE:
++    case SDL_DROPTEXT:
++    case SDL_DROPCOMPLETE:
++        return event.drop.windowID;
++    case SDL_USEREVENT:
++        return event.user.windowID;
++    default:
++        // Event is not for any particular window, so we can just pretend it's for this one.
++        return render_window_id;
++    }
++}
++
++void EmuWindow_SDL2::PollEvents() {
++    SDL_Event event;
++    std::vector<SDL_Event> other_window_events;
++
++    // SDL_PollEvent returns 0 when there are no more events in the event queue
++    while (SDL_PollEvent(&event)) {
++        if (GetEventWindowId(event) != render_window_id) {
++            other_window_events.push_back(event);
++            continue;
++        }
++
++        switch (event.type) {
++        case SDL_WINDOWEVENT:
++            switch (event.window.event) {
++            case SDL_WINDOWEVENT_SIZE_CHANGED:
++            case SDL_WINDOWEVENT_RESIZED:
++            case SDL_WINDOWEVENT_MAXIMIZED:
++            case SDL_WINDOWEVENT_RESTORED:
++            case SDL_WINDOWEVENT_MINIMIZED:
++                OnResize();
++                break;
++            case SDL_WINDOWEVENT_CLOSE:
++                RequestClose();
++                break;
++            }
++            break;
++        case SDL_KEYDOWN:
++        case SDL_KEYUP:
++            OnKeyEvent(static_cast<int>(event.key.keysym.scancode), event.key.state);
++            break;
++        case SDL_JOYBUTTONDOWN:
++        case SDL_JOYBUTTONUP:
++            // input_common still receives these via its event watch; this is just for the
++            // frontend's own layout-cycle hotkey, which doesn't conflict with normal mapping.
++            OnGamepadButton(event.jbutton.button, event.jbutton.state);
++            break;
++        case SDL_MOUSEMOTION:
++            // ignore if it came from touch
++            if (event.button.which != SDL_TOUCH_MOUSEID)
++                OnMouseMotion(event.motion.x, event.motion.y);
++            break;
++        case SDL_MOUSEBUTTONDOWN:
++        case SDL_MOUSEBUTTONUP:
++            // ignore if it came from touch
++            if (event.button.which != SDL_TOUCH_MOUSEID) {
++                OnMouseButton(event.button.button, event.button.state, event.button.x,
++                              event.button.y);
++            }
++            break;
++        case SDL_FINGERDOWN:
++            OnFingerDown(event.tfinger.x, event.tfinger.y);
++            break;
++        case SDL_FINGERMOTION:
++            OnFingerMotion(event.tfinger.x, event.tfinger.y);
++            break;
++        case SDL_FINGERUP:
++            OnFingerUp();
++            break;
++        case SDL_QUIT:
++            RequestClose();
++            break;
++        default:
++            break;
++        }
++    }
++    for (auto& e : other_window_events) {
++        // This is a somewhat hacky workaround to re-emit window events meant for another window
++        // since SDL_PollEvent() is global but we poll events per window.
++        SDL_PushEvent(&e);
++    }
++    if (!is_secondary) {
++        UpdateFramerateCounter();
++    }
++}
++
++void EmuWindow_SDL2::OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) {
++    SDL_SetWindowMinimumSize(render_window, minimal_size.first, minimal_size.second);
++}
++
++void EmuWindow_SDL2::UpdateFramerateCounter() {
++    const u32 current_time = SDL_GetTicks();
++    if (current_time > last_time + 2000) {
++        const auto results = system.GetAndResetPerfStats();
++        const auto title =
++            fmt::format("Azahar {} | {}-{} | FPS: {:.0f} ({:.0f}%)", Common::g_build_fullname,
++                        Common::g_scm_branch, Common::g_scm_desc, results.game_fps,
++                        results.emulation_speed * 100.0f);
++        SDL_SetWindowTitle(render_window, title.c_str());
++        last_time = current_time;
++    }
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2.h b/src/citra_sdl/emu_window/emu_window_sdl2.h
+new file mode 100644
+index 000000000..90dffbc4e
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2.h
+@@ -0,0 +1,106 @@
++// Copyright 2016 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include <utility>
++#include "common/common_types.h"
++#include "core/frontend/emu_window.h"
++
++union SDL_Event;
++struct SDL_Window;
++
++namespace Core {
++class System;
++}
++
++class EmuWindow_SDL2 : public Frontend::EmuWindow {
++public:
++    explicit EmuWindow_SDL2(Core::System& system_, bool is_secondary);
++    ~EmuWindow_SDL2();
++
++    /// Initializes SDL2
++    static void InitializeSDL2();
++
++    /// Presents the most recent frame from the video backend
++    virtual void Present() {}
++
++    /// Polls window events
++    void PollEvents() override;
++
++    /// Whether the window is still open, and a close request hasn't yet been sent
++    bool IsOpen() const;
++
++    /// Close the window.
++    void RequestClose();
++
++protected:
++    /// Gets the ID of the window an event originated from.
++    u32 GetEventWindowId(const SDL_Event& event) const;
++
++    /// Called by PollEvents when a key is pressed or released.
++    void OnKeyEvent(int key, u8 state);
++
++    /// Called by PollEvents on a raw joystick button event; handles the layout-cycle hotkey
++    /// (default Select + R) so the user can switch 3DS screen arrangements at runtime without a
++    /// keyboard. The buttons are raw joystick indices (overridable via AZAHAR_HOTKEY_MOD /
++    /// AZAHAR_HOTKEY_LAYOUT) so the muOS launcher can derive them from the active gamecontrollerdb.
++    void OnGamepadButton(u32 button, u8 state);
++
++    /// Called by PollEvents when the mouse moves.
++    void OnMouseMotion(s32 x, s32 y);
++
++    /// Called by PollEvents when a mouse button is pressed or released
++    void OnMouseButton(u32 button, u8 state, s32 x, s32 y);
++
++    /// Translates normalized touch position (0..1) to pixel positions
++    virtual std::pair<unsigned, unsigned> TouchToPixelPos(float touch_x, float touch_y) const;
++
++    /// Called by PollEvents when a finger starts touching the touchscreen
++    void OnFingerDown(float x, float y);
++
++    /// Called by PollEvents when a finger moves while touching the touchscreen
++    void OnFingerMotion(float x, float y);
++
++    /// Called by PollEvents when a finger stops touching the touchscreen
++    void OnFingerUp();
++
++    /// Called by PollEvents when any event that may cause the window to be resized occurs
++    virtual void OnResize();
++
++    /// Called when user passes the fullscreen parameter flag
++    void Fullscreen();
++
++    /// Called when a configuration change affects the minimal size of the window
++    void OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) override;
++
++    /// Called when polling to update framerate
++    void UpdateFramerateCounter();
++
++    /// Is the window still open?
++    bool is_open = true;
++
++    /// Internal SDL2 render window
++    SDL_Window* render_window;
++
++    /// Internal SDL2 window ID
++    u32 render_window_id{};
++
++    /// Fake hidden window for the core context
++    SDL_Window* dummy_window;
++
++    /// Keeps track of how often to update the title bar during gameplay
++    u32 last_time = 0;
++
++    /// Hotkey state (raw joystick button indices). Defaults match the RG-Vita-Pro joypad
++    /// (mod=Select=b8, layout=R=b5, swap=L=b4, exit=Start=b9). Each is overridable via env so
++    /// the muOS launcher can derive them from the active controller profile.
++    int hotkey_mod_button = 8;
++    int hotkey_layout_button = 5;
++    int hotkey_swap_button = 4;
++    int hotkey_exit_button = 9;
++    bool hotkey_mod_held = false;
++
++    Core::System& system;
++};
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp b/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp
+new file mode 100644
+index 000000000..f2fc28dc3
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_gl.cpp
+@@ -0,0 +1,167 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <algorithm>
++#include <cstdlib>
++#include <string>
++#define SDL_MAIN_HANDLED
++#include <SDL.h>
++#include <glad/glad.h>
++#include "citra_sdl/emu_window/emu_window_sdl2_gl.h"
++#include "common/scm_rev.h"
++#include "common/settings.h"
++#include "core/core.h"
++#include "video_core/gpu.h"
++#include "video_core/renderer_base.h"
++
++class SDLGLContext : public Frontend::GraphicsContext {
++public:
++    using SDL_GLContext = void*;
++
++    SDLGLContext() {
++        window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0,
++                                  SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL);
++        context = SDL_GL_CreateContext(window);
++    }
++
++    ~SDLGLContext() override {
++        SDL_GL_DeleteContext(context);
++        SDL_DestroyWindow(window);
++    }
++
++    void MakeCurrent() override {
++        SDL_GL_MakeCurrent(window, context);
++    }
++
++    void DoneCurrent() override {
++        SDL_GL_MakeCurrent(window, nullptr);
++    }
++
++private:
++    SDL_Window* window;
++    SDL_GLContext context;
++};
++
++static SDL_Window* CreateGLWindow(const std::string& window_title, bool gles) {
++    if (gles) {
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
++    } else {
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
++    }
++    return SDL_CreateWindow(window_title.c_str(),
++                            SDL_WINDOWPOS_UNDEFINED, // x position
++                            SDL_WINDOWPOS_UNDEFINED, // y position
++                            Core::kScreenTopWidth,
++                            Core::kScreenTopHeight + Core::kScreenBottomHeight,
++                            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
++}
++
++EmuWindow_SDL2_GL::EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, bool is_secondary)
++    : EmuWindow_SDL2{system_, is_secondary} {
++    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
++    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
++    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
++    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
++    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
++    // Enable context sharing for the shared context
++    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
++    // Enable vsync
++    SDL_GL_SetSwapInterval(1);
++    // Enable debug context
++    if (Settings::values.renderer_debug) {
++        SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
++    }
++
++    std::string window_title = fmt::format("Azahar {} | {}-{}", Common::g_build_fullname,
++                                           Common::g_scm_branch, Common::g_scm_desc);
++
++    // First, try to create a context with the requested type.
++    render_window = CreateGLWindow(window_title, Settings::values.use_gles.GetValue());
++    if (render_window == nullptr) {
++        // On failure, fall back to context with flipped type.
++        render_window = CreateGLWindow(window_title, !Settings::values.use_gles.GetValue());
++        if (render_window == nullptr) {
++            LOG_CRITICAL(Frontend, "Failed to create SDL2 window: {}", SDL_GetError());
++            exit(1);
++        }
++    }
++
++    strict_context_required = std::strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0;
++
++    dummy_window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0,
++                                    SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL);
++
++    if (fullscreen) {
++        Fullscreen();
++    }
++
++    window_context = SDL_GL_CreateContext(render_window);
++    core_context = CreateSharedContext();
++    last_saved_context = nullptr;
++
++    if (window_context == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to create SDL2 GL context: {}", SDL_GetError());
++        exit(1);
++    }
++    if (core_context == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to create shared SDL2 GL context: {}", SDL_GetError());
++        exit(1);
++    }
++
++    render_window_id = SDL_GetWindowID(render_window);
++
++    int profile_mask = 0;
++    SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &profile_mask);
++    auto gl_load_func =
++        profile_mask == SDL_GL_CONTEXT_PROFILE_ES ? gladLoadGLES2Loader : gladLoadGLLoader;
++
++    if (!gl_load_func(static_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
++        LOG_CRITICAL(Frontend, "Failed to initialize GL functions: {}", SDL_GetError());
++        exit(1);
++    }
++
++    OnResize();
++    OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
++    SDL_PumpEvents();
++}
++
++EmuWindow_SDL2_GL::~EmuWindow_SDL2_GL() {
++    core_context.reset();
++    SDL_DestroyWindow(render_window);
++    SDL_GL_DeleteContext(window_context);
++}
++
++std::unique_ptr<Frontend::GraphicsContext> EmuWindow_SDL2_GL::CreateSharedContext() const {
++    return std::make_unique<SDLGLContext>();
++}
++
++void EmuWindow_SDL2_GL::MakeCurrent() {
++    core_context->MakeCurrent();
++}
++
++void EmuWindow_SDL2_GL::DoneCurrent() {
++    core_context->DoneCurrent();
++}
++
++void EmuWindow_SDL2_GL::SaveContext() {
++    last_saved_context = SDL_GL_GetCurrentContext();
++}
++
++void EmuWindow_SDL2_GL::RestoreContext() {
++    SDL_GL_MakeCurrent(render_window, last_saved_context);
++}
++
++void EmuWindow_SDL2_GL::Present() {
++    SDL_GL_MakeCurrent(render_window, window_context);
++    SDL_GL_SetSwapInterval(1);
++    while (IsOpen()) {
++        system.GPU().Renderer().TryPresent(100, is_secondary);
++        SDL_GL_SwapWindow(render_window);
++    }
++    SDL_GL_MakeCurrent(render_window, nullptr);
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_gl.h b/src/citra_sdl/emu_window/emu_window_sdl2_gl.h
+new file mode 100644
+index 000000000..6e9045cba
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_gl.h
+@@ -0,0 +1,39 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include <memory>
++#include "citra_sdl/emu_window/emu_window_sdl2.h"
++
++struct SDL_Window;
++
++namespace Core {
++class System;
++}
++
++class EmuWindow_SDL2_GL : public EmuWindow_SDL2 {
++public:
++    explicit EmuWindow_SDL2_GL(Core::System& system_, bool fullscreen, bool is_secondary);
++    ~EmuWindow_SDL2_GL();
++
++    void Present() override;
++    std::unique_ptr<GraphicsContext> CreateSharedContext() const override;
++    void MakeCurrent() override;
++    void DoneCurrent() override;
++    void SaveContext() override;
++    void RestoreContext() override;
++
++private:
++    using SDL_GLContext = void*;
++
++    /// The OpenGL context associated with the window
++    SDL_GLContext window_context;
++
++    /// Used by SaveContext and RestoreContext
++    SDL_GLContext last_saved_context;
++
++    /// The OpenGL context associated with the core
++    std::unique_ptr<Frontend::GraphicsContext> core_context;
++};
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_sw.cpp b/src/citra_sdl/emu_window/emu_window_sdl2_sw.cpp
+new file mode 100644
+index 000000000..8da894fec
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_sw.cpp
+@@ -0,0 +1,108 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <algorithm>
++#include <cstdlib>
++#include <string>
++#define SDL_MAIN_HANDLED
++#include <SDL.h>
++#include <SDL_rect.h>
++#include "citra_sdl/emu_window/emu_window_sdl2_sw.h"
++#include "common/scm_rev.h"
++#include "common/settings.h"
++#include "core/core.h"
++#include "core/frontend/emu_window.h"
++#include "video_core/gpu.h"
++#include "video_core/renderer_software/renderer_software.h"
++
++class DummyContext : public Frontend::GraphicsContext {};
++
++EmuWindow_SDL2_SW::EmuWindow_SDL2_SW(Core::System& system_, bool fullscreen, bool is_secondary)
++    : EmuWindow_SDL2{system_, is_secondary}, system{system_} {
++    std::string window_title = fmt::format("Azahar {} | {}-{}", Common::g_build_fullname,
++                                           Common::g_scm_branch, Common::g_scm_desc);
++    render_window =
++        SDL_CreateWindow(window_title.c_str(),
++                         SDL_WINDOWPOS_UNDEFINED, // x position
++                         SDL_WINDOWPOS_UNDEFINED, // y position
++                         Core::kScreenTopWidth, Core::kScreenTopHeight + Core::kScreenBottomHeight,
++                         SDL_WINDOW_SHOWN);
++
++    if (render_window == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to create SDL2 window: {}", SDL_GetError());
++        exit(1);
++    }
++
++    window_surface = SDL_GetWindowSurface(render_window);
++    renderer = SDL_CreateSoftwareRenderer(window_surface);
++
++    if (renderer == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to create SDL2 software renderer: {}", SDL_GetError());
++        exit(1);
++    }
++
++    if (fullscreen) {
++        Fullscreen();
++    }
++
++    render_window_id = SDL_GetWindowID(render_window);
++
++    OnResize();
++    OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
++    SDL_PumpEvents();
++}
++
++EmuWindow_SDL2_SW::~EmuWindow_SDL2_SW() {
++    SDL_DestroyRenderer(renderer);
++    SDL_DestroyWindow(render_window);
++}
++
++std::unique_ptr<Frontend::GraphicsContext> EmuWindow_SDL2_SW::CreateSharedContext() const {
++    return std::make_unique<DummyContext>();
++}
++
++void EmuWindow_SDL2_SW::Present() {
++    const auto layout{Layout::DefaultFrameLayout(
++        Core::kScreenTopWidth, Core::kScreenTopHeight + Core::kScreenBottomHeight, false, false)};
++
++    using VideoCore::ScreenId;
++
++    while (IsOpen()) {
++        SDL_SetRenderDrawColor(renderer,
++                               static_cast<Uint8>(Settings::values.bg_red.GetValue() * 255),
++                               static_cast<Uint8>(Settings::values.bg_green.GetValue() * 255),
++                               static_cast<Uint8>(Settings::values.bg_blue.GetValue() * 255), 0xFF);
++        SDL_RenderClear(renderer);
++
++        const auto draw_screen = [&](ScreenId screen_id) {
++            const auto dst_rect =
++                screen_id == ScreenId::TopLeft ? layout.top_screen : layout.bottom_screen;
++            SDL_Rect sdl_rect{static_cast<int>(dst_rect.left), static_cast<int>(dst_rect.top),
++                              static_cast<int>(dst_rect.GetWidth()),
++                              static_cast<int>(dst_rect.GetHeight())};
++            SDL_Surface* screen = LoadFramebuffer(screen_id);
++            SDL_BlitSurface(screen, nullptr, window_surface, &sdl_rect);
++            SDL_FreeSurface(screen);
++        };
++
++        draw_screen(ScreenId::TopLeft);
++        draw_screen(ScreenId::Bottom);
++
++        SDL_RenderPresent(renderer);
++        SDL_UpdateWindowSurface(render_window);
++    }
++}
++
++SDL_Surface* EmuWindow_SDL2_SW::LoadFramebuffer(VideoCore::ScreenId screen_id) {
++    const auto& renderer = static_cast<SwRenderer::RendererSoftware&>(system.GPU().Renderer());
++    const auto& info = renderer.Screen(screen_id);
++    const int width = static_cast<int>(info.width);
++    const int height = static_cast<int>(info.height);
++    SDL_Surface* surface =
++        SDL_CreateRGBSurfaceWithFormat(0, width, height, 0, SDL_PIXELFORMAT_ABGR8888);
++    SDL_LockSurface(surface);
++    std::memcpy(surface->pixels, info.pixels.data(), info.pixels.size());
++    SDL_UnlockSurface(surface);
++    return surface;
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_sw.h b/src/citra_sdl/emu_window/emu_window_sdl2_sw.h
+new file mode 100644
+index 000000000..12f446e33
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_sw.h
+@@ -0,0 +1,43 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include <memory>
++#include "citra_sdl/emu_window/emu_window_sdl2.h"
++
++struct SDL_Renderer;
++struct SDL_Surface;
++
++namespace VideoCore {
++enum class ScreenId : u32;
++}
++
++namespace Core {
++class System;
++}
++
++class EmuWindow_SDL2_SW : public EmuWindow_SDL2 {
++public:
++    explicit EmuWindow_SDL2_SW(Core::System& system, bool fullscreen, bool is_secondary);
++    ~EmuWindow_SDL2_SW();
++
++    void Present() override;
++    std::unique_ptr<GraphicsContext> CreateSharedContext() const override;
++    void MakeCurrent() override {}
++    void DoneCurrent() override {}
++
++private:
++    /// Loads a framebuffer to an SDL surface
++    SDL_Surface* LoadFramebuffer(VideoCore::ScreenId screen_id);
++
++    /// The system class.
++    Core::System& system;
++
++    /// The SDL software renderer
++    SDL_Renderer* renderer;
++
++    /// The window surface
++    SDL_Surface* window_surface;
++};
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_vk.cpp b/src/citra_sdl/emu_window/emu_window_sdl2_vk.cpp
+new file mode 100644
+index 000000000..03e236027
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_vk.cpp
+@@ -0,0 +1,194 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#include <algorithm>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <memory>
++#include <string>
++#include <utility>
++#include <vector>
++#include <SDL.h>
++#include <SDL_syswm.h>
++#include <SDL_vulkan.h>
++#include <fmt/format.h>
++#include "citra_sdl/emu_window/emu_window_sdl2_vk.h"
++#include "common/logging/log.h"
++#include "common/scm_rev.h"
++#include "core/frontend/emu_window.h"
++
++class DummyContext : public Frontend::GraphicsContext {};
++
++namespace {
++// Desired clockwise display rotation (0/90/180/270) for bare KMS/DRM panels mounted rotated.
++// AZAHAR_DISPLAY_ROTATION (degrees) overrides the kernel cmdline fbcon=rotate:N (N=1/2/3 ->
++// 90/180/270), which is how muOS conveys the panel mounting via extlinux.conf. The env override
++// lets the rotation direction be tuned on-device without rebuilding.
++u32 ReadDisplayRotation() {
++    if (const char* env = std::getenv("AZAHAR_DISPLAY_ROTATION"); env && *env) {
++        const int deg = std::atoi(env);
++        if (deg == 0 || deg == 90 || deg == 180 || deg == 270) {
++            return static_cast<u32>(deg);
++        }
++        LOG_WARNING(Frontend, "Ignoring AZAHAR_DISPLAY_ROTATION={} (use 0/90/180/270)", env);
++    }
++    u32 degrees = 0;
++    if (std::FILE* fp = std::fopen("/proc/cmdline", "r")) {
++        char buf[4096];
++        if (std::fgets(buf, sizeof(buf), fp)) {
++            if (const char* p = std::strstr(buf, "fbcon=rotate:")) {
++                const int n = std::atoi(p + std::strlen("fbcon=rotate:"));
++                if (n >= 1 && n <= 3) {
++                    // fbcon=rotate:N describes the panel mounting (N*90 CW). To display upright we
++                    // rotate the content by the inverse. Verified on RG-Vita-Pro: a 270° panel
++                    // (fbcon=rotate:3) needs a 90° CW content rotation.
++                    degrees = (360u - static_cast<u32>(n) * 90u) % 360u;
++                }
++            }
++        }
++        std::fclose(fp);
++    }
++    return degrees;
++}
++} // Anonymous namespace
++
++EmuWindow_SDL2_VK::EmuWindow_SDL2_VK(Core::System& system, bool fullscreen, bool is_secondary)
++    : EmuWindow_SDL2{system, is_secondary} {
++    const std::string window_title = fmt::format("Azahar {} | {}-{}", Common::g_build_fullname,
++                                                 Common::g_scm_branch, Common::g_scm_desc);
++    // On bare KMS/DRM the Vulkan WSI uses VK_KHR_display, which can only create a surface whose
++    // size matches a real display mode. A logical 400x480 window has no matching DRM mode and
++    // fails, so create the window at the display's native resolution and go fullscreen from the
++    // start. (The GL/EGL path doesn't need this because it renders via GBM at any size.)
++    int width = Core::kScreenTopWidth;
++    int height = Core::kScreenTopHeight + Core::kScreenBottomHeight;
++    Uint32 window_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
++
++    const char* video_driver = SDL_GetCurrentVideoDriver();
++    const bool is_bare_drm = video_driver != nullptr && std::string(video_driver) == "KMSDRM";
++
++    SDL_DisplayMode display_mode;
++    if (is_bare_drm && SDL_GetDesktopDisplayMode(0, &display_mode) == 0) {
++        width = display_mode.w;
++        height = display_mode.h;
++        window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
++    } else {
++        window_flags |= SDL_WINDOW_RESIZABLE;
++    }
++
++    render_window = SDL_CreateWindow(window_title.c_str(), SDL_WINDOWPOS_UNDEFINED,
++                                     SDL_WINDOWPOS_UNDEFINED, width, height, window_flags);
++    if (render_window == nullptr) {
++        LOG_CRITICAL(Frontend, "Failed to create SDL2 Vulkan window: {}", SDL_GetError());
++        std::exit(EXIT_FAILURE);
++    }
++
++    if (is_bare_drm) {
++        // Already fullscreen at the native display mode; just hide the cursor.
++        SDL_ShowCursor(false);
++    } else if (fullscreen) {
++        Fullscreen();
++        SDL_ShowCursor(false);
++    }
++
++    // The Vulkan surface and required instance extensions are obtained from SDL
++    // (SDL_Vulkan_CreateSurface / SDL_Vulkan_GetInstanceExtensions). SDL handles every video
++    // backend uniformly, including bare KMS/DRM (via VK_KHR_display) where there is no X11 or
++    // Wayland WSI. Mark the window type so the Vulkan backend uses the frontend-provided surface
++    // instead of native platform-specific WSI code.
++    window_info.type = Frontend::WindowSystemType::Display;
++
++    display_rotation = ReadDisplayRotation();
++    if (display_rotation != 0) {
++        LOG_INFO(Frontend, "Applying application-side display rotation: {} degrees",
++                 display_rotation);
++    }
++
++    render_window_id = SDL_GetWindowID(render_window);
++
++    OnResize();
++    OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
++    SDL_PumpEvents();
++}
++
++void EmuWindow_SDL2_VK::OnResize() {
++    int width = 0, height = 0;
++    SDL_Vulkan_GetDrawableSize(render_window, &width, &height);
++    if (width <= 0 || height <= 0) {
++        // The drawable size may not be available before the first frame; fall back to window size.
++        SDL_GetWindowSize(render_window, &width, &height);
++    }
++    if (width > 0 && height > 0) {
++        // For 90/270 rotation the renderer lays out a landscape frame and rotates it into the
++        // portrait swapchain, so report transposed (landscape) dimensions to the layout system.
++        // For 90/270 rotation the layout must be LANDSCAPE (the orientation the user sees); the
++        // renderer transposes to the physical portrait swapchain and rotates the composition.
++        // SDL already reports a landscape drawable on this panel, so only swap if it came in
++        // portrait — swapping an already-landscape drawable causes a frame/swapchain size
++        // mismatch and a stretched blit.
++        if ((display_rotation == 90 || display_rotation == 270) && height > width) {
++            std::swap(width, height);
++        }
++        UpdateCurrentFramebufferLayout(width, height);
++    }
++}
++
++u32 EmuWindow_SDL2_VK::GetDisplayRotation() const {
++    return display_rotation;
++}
++
++std::pair<unsigned, unsigned> EmuWindow_SDL2_VK::TouchToPixelPos(float touch_x,
++                                                                 float touch_y) const {
++    const auto& layout = GetFramebufferLayout();
++    // SDL reports the finger position normalized (0..1). On a rotated panel the touch surface is
++    // physically aligned with the display, so apply the same rotation to map it onto the logical
++    // landscape layout. (Direction may need tuning; the log below reveals the raw orientation.)
++    float nx, ny;
++    switch (display_rotation) {
++    case 90:  nx = 1.0f - touch_y; ny = touch_x;        break;
++    case 180: nx = 1.0f - touch_x; ny = 1.0f - touch_y; break;
++    case 270: nx = touch_y;        ny = 1.0f - touch_x; break;
++    default:  nx = touch_x;        ny = touch_y;        break;
++    }
++    const float px = nx * static_cast<float>(layout.width);
++    const float py = ny * static_cast<float>(layout.height);
++    LOG_DEBUG(Frontend, "VK touch raw=({:.3f},{:.3f}) rot={} -> ({},{}) [layout {}x{}]", touch_x,
++              touch_y, display_rotation, static_cast<int>(px), static_cast<int>(py), layout.width,
++              layout.height);
++    return {static_cast<unsigned>(std::max(std::round(px), 0.0f)),
++            static_cast<unsigned>(std::max(std::round(py), 0.0f))};
++}
++
++std::vector<std::string> EmuWindow_SDL2_VK::GetVulkanInstanceExtensions() const {
++    unsigned int count = 0;
++    if (SDL_Vulkan_GetInstanceExtensions(render_window, &count, nullptr) != SDL_TRUE) {
++        LOG_CRITICAL(Frontend, "Failed to query Vulkan instance extension count: {}",
++                     SDL_GetError());
++        return {};
++    }
++    std::vector<const char*> names(count);
++    if (SDL_Vulkan_GetInstanceExtensions(render_window, &count, names.data()) != SDL_TRUE) {
++        LOG_CRITICAL(Frontend, "Failed to get Vulkan instance extensions: {}", SDL_GetError());
++        return {};
++    }
++    return {names.begin(), names.end()};
++}
++
++void* EmuWindow_SDL2_VK::CreateVulkanSurface(void* instance) const {
++    VkSurfaceKHR surface{};
++    if (SDL_Vulkan_CreateSurface(render_window, static_cast<VkInstance>(instance), &surface) !=
++        SDL_TRUE) {
++        LOG_CRITICAL(Frontend, "Failed to create Vulkan surface: {}", SDL_GetError());
++        return nullptr;
++    }
++    return reinterpret_cast<void*>(surface);
++}
++
++EmuWindow_SDL2_VK::~EmuWindow_SDL2_VK() = default;
++
++std::unique_ptr<Frontend::GraphicsContext> EmuWindow_SDL2_VK::CreateSharedContext() const {
++    return std::make_unique<DummyContext>();
++}
+diff --git a/src/citra_sdl/emu_window/emu_window_sdl2_vk.h b/src/citra_sdl/emu_window/emu_window_sdl2_vk.h
+new file mode 100644
+index 000000000..c0ec4b887
+--- /dev/null
++++ b/src/citra_sdl/emu_window/emu_window_sdl2_vk.h
+@@ -0,0 +1,37 @@
++// Copyright 2023 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include <memory>
++#include <string>
++#include <vector>
++#include "citra_sdl/emu_window/emu_window_sdl2.h"
++
++namespace Frontend {
++class GraphicsContext;
++}
++
++namespace Core {
++class System;
++}
++
++class EmuWindow_SDL2_VK final : public EmuWindow_SDL2 {
++public:
++    explicit EmuWindow_SDL2_VK(Core::System& system_, bool fullscreen, bool is_secondary);
++    ~EmuWindow_SDL2_VK() override;
++
++    std::unique_ptr<Frontend::GraphicsContext> CreateSharedContext() const override;
++
++    void OnResize() override;
++    std::pair<unsigned, unsigned> TouchToPixelPos(float touch_x, float touch_y) const override;
++    std::vector<std::string> GetVulkanInstanceExtensions() const override;
++    void* CreateVulkanSurface(void* instance) const override;
++    u32 GetDisplayRotation() const override;
++
++private:
++    // Clockwise panel rotation in degrees (0/90/180/270), read once at construction from
++    // AZAHAR_DISPLAY_ROTATION or the kernel cmdline (fbcon=rotate:N).
++    u32 display_rotation = 0;
++};
+diff --git a/src/citra_sdl/precompiled_headers.h b/src/citra_sdl/precompiled_headers.h
+new file mode 100644
+index 000000000..ffbb5e177
+--- /dev/null
++++ b/src/citra_sdl/precompiled_headers.h
+@@ -0,0 +1,7 @@
++// Copyright 2022 Citra Emulator Project
++// Licensed under GPLv2 or any later version
++// Refer to the license.txt file included.
++
++#pragma once
++
++#include "common/common_precompiled_headers.h"
+diff --git a/src/citra_sdl/resource.h b/src/citra_sdl/resource.h
+new file mode 100644
+index 000000000..df8e459e4
+--- /dev/null
++++ b/src/citra_sdl/resource.h
+@@ -0,0 +1,16 @@
++//{{NO_DEPENDENCIES}}
++// Microsoft Visual C++ generated include file.
++// Used by pcafe.rc
++//
++#define IDI_ICON3 103
++
++// Next default values for new objects
++//
++#ifdef APSTUDIO_INVOKED
++#ifndef APSTUDIO_READONLY_SYMBOLS
++#define _APS_NEXT_RESOURCE_VALUE 105
++#define _APS_NEXT_COMMAND_VALUE 40001
++#define _APS_NEXT_CONTROL_VALUE 1001
++#define _APS_NEXT_SYMED_VALUE 101
++#endif
++#endif

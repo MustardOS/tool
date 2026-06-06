@@ -1,0 +1,314 @@
+diff --git a/src/core/frontend/emu_window.h b/src/core/frontend/emu_window.h
+index 175f41860..72aeae4cd 100644
+--- a/src/core/frontend/emu_window.h
++++ b/src/core/frontend/emu_window.h
+@@ -5,8 +5,10 @@
+ #pragma once
+ 
+ #include <memory>
++#include <string>
+ #include <tuple>
+ #include <utility>
++#include <vector>
+ 
+ #include "common/common_types.h"
+ #include "core/3ds.h"
+@@ -28,6 +30,9 @@ enum class WindowSystemType : u8 {
+     X11,
+     Wayland,
+     LibRetro,
++    // Generic frontend-managed surface (e.g. SDL on bare KMS/DRM via VK_KHR_display). The
++    // frontend creates the Vulkan surface itself, so no compile-time WSI platform is needed.
++    Display,
+ };
+ 
+ struct Frame;
+@@ -165,6 +170,36 @@ public:
+         float render_surface_scale = 1.0f;
+     };
+ 
++    /**
++     * Returns the Vulkan instance extensions required to present to this window. Default empty.
++     * Frontends that create their Vulkan surface via a portable API (e.g. SDL_Vulkan_*) override
++     * this so the Vulkan backend works on any windowing system, including bare KMS/DRM where there
++     * is no X11/Wayland WSI to select platform-specific extensions at compile time.
++     */
++    virtual std::vector<std::string> GetVulkanInstanceExtensions() const {
++        return {};
++    }
++
++    /**
++     * Creates a Vulkan surface for this window. `instance` is a VkInstance and the return value is
++     * a VkSurfaceKHR, both as opaque pointers to avoid a Vulkan dependency in core. Returns nullptr
++     * when the frontend does not provide surface creation, in which case the Vulkan backend falls
++     * back to native WSI surface creation.
++     */
++    virtual void* CreateVulkanSurface([[maybe_unused]] void* instance) const {
++        return nullptr;
++    }
++
++    /**
++     * Clockwise display rotation in degrees (0/90/180/270) that the renderer must apply itself.
++     * Used on bare KMS/DRM panels mounted rotated, where the Vulkan WSI cannot rotate (it only
++     * advertises IDENTITY). Default 0 (no rotation). The SDL frontend reads this from the kernel
++     * cmdline (fbcon=rotate:N) / an env override.
++     */
++    virtual u32 GetDisplayRotation() const {
++        return 0;
++    }
++
+     /// Polls window events
+     virtual void PollEvents() = 0;
+ 
+diff --git a/src/video_core/renderer_vulkan/renderer_vulkan.cpp b/src/video_core/renderer_vulkan/renderer_vulkan.cpp
+index 0a25c2036..3a8b87991 100644
+--- a/src/video_core/renderer_vulkan/renderer_vulkan.cpp
++++ b/src/video_core/renderer_vulkan/renderer_vulkan.cpp
+@@ -48,12 +48,39 @@ struct ScreenRectVertex {
+ 
+ constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
+ 
+-constexpr std::array<f32, 4 * 4> MakeOrthographicMatrix(u32 width, u32 height) {
++constexpr std::array<f32, 4 * 4> MakeOrthographicMatrix(u32 width, u32 height, u32 rotation = 0) {
++    const f32 w = static_cast<f32>(width);
++    const f32 h = static_cast<f32>(height);
++    // With the present vertex shader's `pos = vert * modelview` and std140 (column-major) upload,
++    // row r of this row-major array yields clip component r: clip[r] = m[4r]*x + m[4r+1]*y + m[4r+3].
++    // For app-side display rotation on bare KMS/DRM panels (where the Vulkan WSI only advertises
++    // IDENTITY), we post-rotate the clip-space result by the panel's clockwise mounting angle.
++    // `width`/`height` are the logical (landscape) layout dims; the renderer keeps the
++    // swapchain/viewport at the physical (portrait) size, so the rotation maps the landscape
++    // composition into the portrait frame with correct aspect.
+     // clang-format off
+-    return { 2.f / width, 0.f,         0.f, -1.f,
+-            0.f,         2.f / height, 0.f, -1.f,
+-            0.f,         0.f,          1.f,  0.f,
+-            0.f,         0.f,          0.f,  1.f};
++    switch (rotation) {
++    case 90: // clip.x = 2y/h - 1 ; clip.y = -(2x/w - 1)
++        return { 0.f,     2.f / h, 0.f, -1.f,
++                -2.f / w, 0.f,     0.f,  1.f,
++                 0.f,     0.f,     1.f,  0.f,
++                 0.f,     0.f,     0.f,  1.f};
++    case 180:
++        return {-2.f / w, 0.f,      0.f,  1.f,
++                 0.f,    -2.f / h,  0.f,  1.f,
++                 0.f,     0.f,      1.f,  0.f,
++                 0.f,     0.f,      0.f,  1.f};
++    case 270: // clip.x = -(2y/h - 1) ; clip.y = 2x/w - 1
++        return { 0.f,    -2.f / h, 0.f,  1.f,
++                 2.f / w, 0.f,     0.f, -1.f,
++                 0.f,     0.f,     1.f,  0.f,
++                 0.f,     0.f,     0.f,  1.f};
++    default:
++        return { 2.f / w, 0.f,     0.f, -1.f,
++                 0.f,     2.f / h, 0.f, -1.f,
++                 0.f,     0.f,     1.f,  0.f,
++                 0.f,     0.f,     0.f,  1.f};
++    }
+     // clang-format on
+ }
+ 
+@@ -198,18 +225,21 @@ void RendererVulkan::PrepareDraw(Frame* frame, const Layout::FramebufferLayout&
+     scheduler.Record([this, layout, frame, present_set,
+                       renderpass = main_present_window.Renderpass(),
+                       index = current_pipeline](vk::CommandBuffer cmdbuf) {
++        // Viewport/scissor cover the physical frame (= swapchain image). For app-side rotation the
++        // frame is the portrait panel size while `layout` is the logical landscape size; the
++        // modelview (built in DrawScreens) rotates the landscape composition into this frame.
+         const vk::Viewport viewport = {
+             .x = 0.0f,
+             .y = 0.0f,
+-            .width = static_cast<float>(layout.width),
+-            .height = static_cast<float>(layout.height),
++            .width = static_cast<float>(frame->width),
++            .height = static_cast<float>(frame->height),
+             .minDepth = 0.0f,
+             .maxDepth = 1.0f,
+         };
+ 
+         const vk::Rect2D scissor = {
+             .offset = {0, 0},
+-            .extent = {layout.width, layout.height},
++            .extent = {frame->width, frame->height},
+         };
+ 
+         cmdbuf.setViewport(0, viewport);
+@@ -239,10 +269,17 @@ void RendererVulkan::RenderToWindow(PresentWindow& window, const Layout::Framebu
+                                     bool flipped) {
+     Frame* frame = window.GetRenderFrame();
+ 
+-    if (layout.width != frame->width || layout.height != frame->height) {
++    // The layout is in logical (post-rotation) space. The frame/swapchain must match the physical
++    // panel size, which for 90/270 app-side rotation is the transpose of the layout.
++    const u32 rotation = render_window.GetDisplayRotation();
++    const bool transpose = (rotation == 90 || rotation == 270);
++    const u32 phys_width = transpose ? layout.height : layout.width;
++    const u32 phys_height = transpose ? layout.width : layout.height;
++
++    if (phys_width != frame->width || phys_height != frame->height) {
+         window.WaitPresent();
+         scheduler.Finish();
+-        window.RecreateFrame(frame, layout.width, layout.height);
++        window.RecreateFrame(frame, phys_width, phys_height);
+     }
+ 
+     clear_color.float32[0] = Settings::values.bg_red.GetValue();
+@@ -1012,7 +1049,8 @@ void RendererVulkan::DrawScreens(Frame* frame, const Layout::FramebufferLayout&
+ 
+     const auto& top_screen = layout.top_screen;
+     const auto& bottom_screen = layout.bottom_screen;
+-    draw_info.modelview = MakeOrthographicMatrix(layout.width, layout.height);
++    draw_info.modelview =
++        MakeOrthographicMatrix(layout.width, layout.height, render_window.GetDisplayRotation());
+ 
+     draw_info.layer = 0;
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_instance.cpp b/src/video_core/renderer_vulkan/vk_instance.cpp
+index d86cc0f67..fd2572bbc 100644
+--- a/src/video_core/renderer_vulkan/vk_instance.cpp
++++ b/src/video_core/renderer_vulkan/vk_instance.cpp
+@@ -133,14 +133,12 @@ std::string GetReadableVersion(u32 version) {
+ 
+ Instance::Instance(bool enable_validation, bool dump_command_buffers)
+     : library{OpenLibrary()},
+-      instance{CreateInstance(*library, Frontend::WindowSystemType::Headless, enable_validation,
+-                              dump_command_buffers)},
++      instance{CreateInstance(*library, nullptr, enable_validation, dump_command_buffers)},
+       physical_devices{instance->enumeratePhysicalDevices()} {}
+ 
+ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
+     : library{OpenLibrary(&window)},
+-      instance{CreateInstance(*library, window.GetWindowInfo().type,
+-                              Settings::values.renderer_debug.GetValue(),
++      instance{CreateInstance(*library, &window, Settings::values.renderer_debug.GetValue(),
+                               Settings::values.dump_command_buffers.GetValue())},
+       debug_callback{CreateDebugCallback(*instance, debug_utils_supported)},
+       physical_devices{instance->enumeratePhysicalDevices()} {
+diff --git a/src/video_core/renderer_vulkan/vk_platform.cpp b/src/video_core/renderer_vulkan/vk_platform.cpp
+index cbec2612e..d7342d287 100644
+--- a/src/video_core/renderer_vulkan/vk_platform.cpp
++++ b/src/video_core/renderer_vulkan/vk_platform.cpp
+@@ -10,11 +10,16 @@
+ #elif defined(__APPLE__)
+ #define VK_USE_PLATFORM_METAL_EXT
+ #else
+-#define VK_USE_PLATFORM_WAYLAND_KHR
+-#define VK_USE_PLATFORM_XLIB_KHR
++// On Linux we do not pin a windowing-system platform (X11/Wayland) at compile time. The frontend
++// supplies the surface and required instance extensions via SDL (SDL_Vulkan_CreateSurface /
++// SDL_Vulkan_GetInstanceExtensions), which works across X11, Wayland and bare KMS/DRM without
++// needing the corresponding system headers (e.g. X11/Xlib.h) to be installed in the sysroot.
+ #endif
+ 
++#include <algorithm>
++#include <cstring>
+ #include <memory>
++#include <string>
+ #include <vector>
+ #include <boost/container/static_vector.hpp>
+ #include <fmt/format.h>
+@@ -126,6 +131,14 @@ std::shared_ptr<Common::DynamicLibrary> OpenLibrary(
+ }
+ 
+ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& emu_window) {
++    // Prefer a surface created by the frontend (e.g. SDL_Vulkan_CreateSurface). This is the only
++    // option on bare KMS/DRM (VK_KHR_display), and also works on X11/Wayland, so we use it whenever
++    // the frontend provides one and fall back to native WSI creation otherwise.
++    if (void* frontend_surface =
++            emu_window.CreateVulkanSurface(static_cast<void*>(static_cast<VkInstance>(instance)))) {
++        return vk::SurfaceKHR(reinterpret_cast<VkSurfaceKHR>(frontend_surface));
++    }
++
+     const auto& window_info = emu_window.GetWindowInfo();
+     vk::SurfaceKHR surface{};
+     vk::Result res;
+@@ -206,6 +219,7 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
+ }
+ 
+ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type,
++                                               const std::vector<std::string>& frontend_extensions,
+                                                bool enable_debug_utils) {
+     const auto properties = vk::enumerateInstanceExtensionProperties();
+     if (properties.empty()) {
+@@ -215,7 +229,15 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
+ 
+     // Add the windowing system specific extension
+     std::vector<const char*> extensions;
+-    extensions.reserve(7);
++    extensions.reserve(7 + frontend_extensions.size());
++
++    // Extensions supplied by the frontend (e.g. SDL_Vulkan_GetInstanceExtensions) take priority.
++    // On bare KMS/DRM these provide VK_KHR_surface + VK_KHR_display; on X11/Wayland they provide
++    // the matching platform-surface extension. They are backed by `frontend_extensions`, which the
++    // caller keeps alive for the duration of instance creation.
++    for (const std::string& extension : frontend_extensions) {
++        extensions.push_back(extension.c_str());
++    }
+ 
+ #if defined(__APPLE__)
+     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+@@ -226,6 +248,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
+     switch (window_type) {
+     case Frontend::WindowSystemType::Headless:
+         break;
++    case Frontend::WindowSystemType::Display:
++        // Frontend-managed surface (e.g. SDL on KMS/DRM); required extensions are supplied via
++        // frontend_extensions above, so nothing platform-specific to add here.
++        break;
+ #if defined(VK_USE_PLATFORM_WIN32_KHR)
+     case Frontend::WindowSystemType::Windows:
+         extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+@@ -260,6 +286,15 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
+         extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+     }
+ 
++    // Remove duplicate extension names (the frontend list may overlap with ones added above,
++    // e.g. VK_KHR_surface). Order is irrelevant for instance extensions.
++    std::sort(extensions.begin(), extensions.end(),
++              [](const char* a, const char* b) { return std::strcmp(a, b) < 0; });
++    extensions.erase(
++        std::unique(extensions.begin(), extensions.end(),
++                    [](const char* a, const char* b) { return std::strcmp(a, b) == 0; }),
++        extensions.end());
++
+     // Sanitize extension list
+     std::erase_if(extensions, [&](const char* extension) -> bool {
+         const auto it =
+@@ -286,7 +321,7 @@ vk::InstanceCreateFlags GetInstanceFlags() {
+ }
+ 
+ vk::UniqueInstance CreateInstance(const Common::DynamicLibrary& library,
+-                                  Frontend::WindowSystemType window_type, bool enable_validation,
++                                  const Frontend::EmuWindow* emu_window, bool enable_validation,
+                                   bool dump_command_buffers) {
+     if (!library.IsLoaded()) {
+         throw std::runtime_error("Failed to load Vulkan driver library");
+@@ -309,7 +344,13 @@ vk::UniqueInstance CreateInstance(const Common::DynamicLibrary& library,
+             VK_VERSION_MAJOR(available_version), VK_VERSION_MINOR(available_version)));
+     }
+ 
+-    const auto extensions = GetInstanceExtensions(window_type, enable_validation);
++    const auto window_type =
++        emu_window ? emu_window->GetWindowInfo().type : Frontend::WindowSystemType::Headless;
++    // Kept alive for the lifetime of this function so the const char* list below stays valid.
++    const std::vector<std::string> frontend_extensions =
++        emu_window ? emu_window->GetVulkanInstanceExtensions() : std::vector<std::string>{};
++    const auto extensions =
++        GetInstanceExtensions(window_type, frontend_extensions, enable_validation);
+ 
+     const vk::ApplicationInfo application_info = {
+         .pApplicationName = "Citra",
+diff --git a/src/video_core/renderer_vulkan/vk_platform.h b/src/video_core/renderer_vulkan/vk_platform.h
+index 68f6457e0..1345832a2 100644
+--- a/src/video_core/renderer_vulkan/vk_platform.h
++++ b/src/video_core/renderer_vulkan/vk_platform.h
+@@ -30,7 +30,7 @@ std::shared_ptr<Common::DynamicLibrary> OpenLibrary(
+ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& emu_window);
+ 
+ vk::UniqueInstance CreateInstance(const Common::DynamicLibrary& library,
+-                                  Frontend::WindowSystemType window_type, bool enable_validation,
++                                  const Frontend::EmuWindow* emu_window, bool enable_validation,
+                                   bool dump_command_buffers);
+ 
+ DebugCallback CreateDebugCallback(vk::Instance instance, bool& debug_utils_supported);
